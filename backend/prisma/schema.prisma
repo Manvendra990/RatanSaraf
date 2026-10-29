@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Metal {
+  Gold
+  Silver
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SaleStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum LedgerKind {
+  BUY
+  SELL
+}
+
+model User {
+  id            String         @id @db.VarChar(36)
+  name          String         @db.VarChar(120)
+  email         String         @unique(map: "email") @db.VarChar(190)
+  phone         String         @unique(map: "phone") @db.VarChar(20)
+  password      String         @db.VarChar(255)
+  role          Role           @default(USER)
+  active        Boolean        @default(true)
+  createdAt     DateTime?      @default(now()) @db.Timestamp(0)
+  manualKyc     ManualKyc?
+  sessions      Session[]
+  shop          Shop?
+  kyc           Kyc[]
+  account       Account?
+  subscriptions Subscription[]
+  payments      Payment[]
+  sales         Sale[]
+  ledger        Ledger[]
+
+  @@map("users")
+}
+
+model Session {
+  hash      String   @id @db.Char(64)
+  userId    String   @db.VarChar(36)
+  expiresAt DateTime @db.DateTime(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "sessions_ibfk_1")
+
+  @@index([userId], map: "userId")
+  @@map("sessions")
+}
+
+model Category {
+  id       String    @id @db.VarChar(36)
+  name     String    @db.VarChar(100)
+  metal    Metal
+  active   Boolean?  @default(true)
+  products Product[]
+
+  @@unique([metal, name], map: "metal")
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @db.VarChar(60)
+  name        String   @db.VarChar(160)
+  metal       Metal
+  categoryId  String   @db.VarChar(36)
+  pricePaise  BigInt   @db.UnsignedBigInt
+  weight      String   @db.VarChar(60)
+  purity      String   @db.VarChar(60)
+  image       String   @default("") @db.VarChar(2000)
+  description String   @db.Text
+  coinWeight  Decimal? @db.Decimal(10, 3)
+  stock       Int      @default(0) @db.UnsignedInt
+  active      Boolean  @default(true)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "products_ibfk_1")
+
+  @@index([categoryId], map: "categoryId")
+  @@map("products")
+}
+
+model Shop {
+  userId    String @id @db.VarChar(36)
+  cart      Json
+  favorites Json
+  user      User   @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "shop_ibfk_1")
+
+  @@map("shop")
+}
+
+model Rate {
+  id        String    @id @db.VarChar(36)
+  metal     Metal
+  buyPaise  BigInt    @db.UnsignedBigInt
+  sellPaise BigInt    @db.UnsignedBigInt
+  source    String    @db.VarChar(120)
+  createdAt DateTime? @default(now()) @db.Timestamp(3)
+  payments  Payment[]
+  sales     Sale[]
+
+  @@map("rates")
+}
+
+model Plan {
+  id            String         @id @db.VarChar(36)
+  name          String         @db.VarChar(100)
+  months        Int
+  minPaise      BigInt         @db.UnsignedBigInt
+  active        Boolean        @default(true)
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Kyc {
+  id             String    @id @db.VarChar(36)
+  userId         String    @db.VarChar(36)
+  status         KycStatus
+  providerRef    String?   @unique(map: "providerRef") @db.VarChar(190)
+  consentVersion String    @db.VarChar(40)
+  consentAt      DateTime  @db.DateTime(0)
+  updatedAt      DateTime? @default(now()) @updatedAt @db.Timestamp(0)
+  user           User      @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "kyc_ibfk_1")
+
+  @@index([userId], map: "userId")
+  @@map("kyc")
+}
+
+model Account {
+  userId   String @id @db.VarChar(36)
+  grams    BigInt @default(0) @db.UnsignedBigInt
+  reserved BigInt @default(0) @db.UnsignedBigInt
+  user     User   @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "accounts_ibfk_1")
+
+  // MySQL CHECK(reserved <= grams) is retained explicitly in migration.sql.
+  @@map("accounts")
+}
+
+model Subscription {
+  id          String             @id @db.VarChar(36)
+  userId      String             @db.VarChar(36)
+  planId      String             @db.VarChar(36)
+  amountPaise BigInt             @db.UnsignedBigInt
+  status      SubscriptionStatus @default(ACTIVE)
+  anchorAt    DateTime           @db.DateTime(0)
+  paidCount   Int                @default(0)
+  nextDue     DateTime           @db.DateTime(0)
+  user        User               @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "subscriptions_ibfk_1")
+  plan        Plan               @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "subscriptions_ibfk_2")
+  payments    Payment[]
+
+  @@index([userId], map: "userId")
+  @@index([planId], map: "planId")
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String        @id @db.VarChar(36)
+  userId         String        @db.VarChar(36)
+  subscriptionId String        @db.VarChar(36)
+  reference      String        @unique(map: "reference") @db.VarChar(120)
+  rateId         String        @db.VarChar(36)
+  amountPaise    BigInt        @db.UnsignedBigInt
+  grams          BigInt        @db.UnsignedBigInt
+  status         PaymentStatus @default(PENDING)
+  allocationRef  String?       @unique(map: "allocationRef") @db.VarChar(190)
+  note           String?       @db.VarChar(500)
+  createdAt      DateTime?     @default(now()) @db.Timestamp(0)
+  user           User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "payments_ibfk_1")
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "payments_ibfk_2")
+  rate           Rate          @relation(fields: [rateId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "payments_ibfk_3")
+
+  @@index([userId], map: "userId")
+  @@index([subscriptionId], map: "subscriptionId")
+  @@index([rateId], map: "rateId")
+  @@map("payments")
+}
+
+model Sale {
+  id              String      @id @db.VarChar(36)
+  userId          String      @db.VarChar(36)
+  rateId          String      @db.VarChar(36)
+  grams           BigInt      @db.UnsignedBigInt
+  amountPaise     BigInt      @db.UnsignedBigInt
+  payoutDetails   String      @db.VarChar(500)
+  status          SaleStatus? @default(PENDING)
+  payoutReference String?     @unique(map: "payoutReference") @db.VarChar(190)
+  note            String?     @db.VarChar(500)
+  createdAt       DateTime?   @default(now()) @db.Timestamp(0)
+  user            User        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "sales_ibfk_1")
+  rate            Rate        @relation(fields: [rateId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "sales_ibfk_2")
+
+  @@index([userId], map: "userId")
+  @@index([rateId], map: "rateId")
+  @@map("sales")
+}
+
+model Ledger {
+  id          String     @id @db.VarChar(36)
+  userId      String     @db.VarChar(36)
+  kind        LedgerKind
+  referenceId String     @unique(map: "referenceId") @db.VarChar(36)
+  grams       BigInt
+  amountPaise BigInt     @db.UnsignedBigInt
+  createdAt   DateTime?  @default(now()) @db.Timestamp(0)
+  user        User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "ledger_ibfk_1")
+
+  @@index([userId], map: "userId")
+  @@map("ledger")
+}
+
+model Enquiry {
+  id        String    @id @db.VarChar(36)
+  userId    String    @db.VarChar(36)
+  productId String    @db.VarChar(60)
+  message   String    @db.VarChar(1000)
+  createdAt DateTime? @default(now()) @db.Timestamp(0)
+
+  @@map("enquiries")
+}
+
+model Audit {
+  id          String    @id @db.VarChar(36)
+  actor       String    @db.VarChar(36)
+  action      String    @db.VarChar(60)
+  referenceId String    @db.VarChar(60)
+  createdAt   DateTime? @default(now()) @db.Timestamp(0)
+
+  @@map("audit")
+}
+
+model Setting {
+  id   Int  @id
+  data Json
+
+  @@map("settings")
+}
+
+enum ManualKycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+model ManualKyc {
+  id             String          @id @db.VarChar(36)
+  userId         String          @unique(map: "userId") @db.VarChar(36)
+  status         ManualKycStatus @default(PENDING)
+  profileCipher  String          @db.LongText
+  documentCipher Bytes           @db.LongBlob
+  documentMime   String          @db.VarChar(50)
+  version        Int             @default(1) @db.UnsignedInt
+  panLast4       String          @db.VarChar(4)
+  consentVersion String          @db.VarChar(40)
+  consentAt      DateTime        @db.DateTime(0)
+  submittedAt    DateTime        @db.DateTime(0)
+  reviewedAt     DateTime?       @db.DateTime(0)
+  reviewedBy     String?         @db.VarChar(36)
+  note           String?         @db.VarChar(500)
+  user           User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "manual_kyc_ibfk_1")
+  @@map("manual_kyc")
+}
