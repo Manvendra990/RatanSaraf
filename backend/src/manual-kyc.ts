@@ -34,13 +34,13 @@ export class ManualKycController {
  @Get('admin/:id') @UseGuards(Admin) async detail(@Req() req:any,@Param('id') id:string){
   const [r]=await rows(`SELECT ${summary},profileCipher FROM manual_kyc WHERE id=?`,[id]);if(!r)throw new NotFoundException();
   const profile=JSON.parse(unseal(Buffer.from(r.profileCipher,'base64')).toString('utf8'));delete r.profileCipher;
-  await rows('INSERT INTO audit(id,actor,action,referenceId) VALUES(?,?,?,?)',[randomUUID(),req.user.id,'MANUAL_KYC_VIEW',id]);return {...r,profile};
+  await rows('INSERT INTO audit(id,actor,action,referenceId) VALUES(?,?,?,?)',[randomUUID(),req.user.id,'MANUAL_KYC_VIEW',id]);return {...r,version:Number(r.version),profile};
  }
  @Get(':id/document') async document(@Req() req:any,@Param('id') id:string,@Res() res:any){
   const [r]=await rows('SELECT userId,documentCipher,documentMime FROM manual_kyc WHERE id=?',[id]);if(!r)throw new NotFoundException();if(req.user.role!=='ADMIN'&&r.userId!==req.user.id)throw new ForbiddenException();
   const bytes=unseal(Buffer.from(r.documentCipher));const ext=r.documentMime==='application/pdf'?'pdf':r.documentMime==='image/png'?'png':'jpg';
   await rows('INSERT INTO audit(id,actor,action,referenceId) VALUES(?,?,?,?)',[randomUUID(),req.user.id,'MANUAL_KYC_DOCUMENT',id]);
-  res.set({'Content-Type':r.documentMime,'Cache-Control':'no-store','Content-Disposition':`inline; filename="pan-${id}.${ext}"`,'X-Content-Type-Options':'nosniff'});res.send(bytes);
+  res.set({'Content-Type':r.documentMime,'Cache-Control':'no-store','Content-Disposition':`inline; filename="pan-document.${ext}"`,'X-Content-Type-Options':'nosniff'});res.send(bytes);
  }
  @Post('admin/:id/decision') @UseGuards(Admin) async decision(@Req() req:any,@Param('id') id:string,@Body() b:ManualKycDecision){
   check(b.note.trim().length>=3,'Enter your review reason');return tx(async db=>{
@@ -48,7 +48,8 @@ export class ManualKycController {
    check(lookup.userId!==req.user.id,'You cannot review your own submission');
    await rows('SELECT id FROM users WHERE id=? FOR UPDATE',[lookup.userId],db);
    const [r]=await rows('SELECT status,version,profileCipher FROM manual_kyc WHERE id=? FOR UPDATE',[id],db);const target=b.action==='APPROVE'?'APPROVED':'REJECTED';
-   check(r.version===b.version,'Submission changed. Reopen and review the latest details before deciding.');
+   const currentVersion=Number(r.version);
+   check(Number.isSafeInteger(currentVersion)&&currentVersion===b.version,'Submission changed. Reopen and review the latest details before deciding.');
    if(r.status===target)return {ok:true,status:target};check(r.status==='PENDING','Review already finalized');
    // Approval requires the stored details to remain readable with the configured key.
    unseal(Buffer.from(r.profileCipher,'base64'));

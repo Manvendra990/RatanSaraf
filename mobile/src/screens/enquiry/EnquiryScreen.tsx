@@ -23,7 +23,7 @@ export function EnquiryScreen({ route }: Props) {
       <ProductImage product={p} style={styles.image} />
       <Subheading>{p.name}</Subheading>
       <Body>
-        {`Product ID: ${p.id}\nMetal: ${p.metal}\nPurity: ${p.purity}\nWeight: ${p.weight}\nIndicative Price: ${inr(p.price)}\n\nPlease confirm availability and final price.`}
+        {`Product: ${p.productCode || p.name}\nMetal: ${p.metal}\nPurity: ${p.purity}\nWeight: ${p.weight}${p.coinWeight ? `\nIndicative Price: ${inr(p.price || 0)}` : ''}\n\nPlease confirm availability and final price.`}
       </Body>
       <Button title="Send on WhatsApp" variant="whatsapp" onPress={() => enquire([p])} />
     </Screen>

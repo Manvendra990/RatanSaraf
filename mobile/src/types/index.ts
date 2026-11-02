@@ -5,7 +5,13 @@ export type Product = {
   name: string;
   metal: Metal;
   category: string;
-  price: number;
+  price?: number;
+  productCode?: string;
+  brand?: string;
+  colour?: string;
+  availability?: string;
+  certifiedBy?: string;
+  featured?: boolean;
   weight: string;
   purity: string;
   image: string;

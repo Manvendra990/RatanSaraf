@@ -40,3 +40,65 @@ CREATE TABLE IF NOT EXISTS manual_kyc (
  note VARCHAR(500) NULL,
  FOREIGN KEY(userId) REFERENCES users(id)
 ) ENGINE=InnoDB;
+
+ALTER TABLE products
+ ADD COLUMN productCode VARCHAR(80) NOT NULL DEFAULT '',
+ ADD COLUMN brand VARCHAR(120) NOT NULL DEFAULT '',
+ ADD COLUMN colour VARCHAR(80) NOT NULL DEFAULT '',
+ ADD COLUMN availability VARCHAR(160) NOT NULL DEFAULT 'Contact store',
+ ADD COLUMN certifiedBy VARCHAR(160) NOT NULL DEFAULT '',
+ ADD COLUMN featured BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE banners (
+ id VARCHAR(36) PRIMARY KEY, title VARCHAR(160) NOT NULL, subtitle VARCHAR(300) NOT NULL,
+ image VARCHAR(2000) NOT NULL, buttonLabel VARCHAR(80) NOT NULL, target VARCHAR(30) NOT NULL,
+ sortOrder INT NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE
+) ENGINE=InnoDB;
+CREATE TABLE display_rates (
+ id VARCHAR(36) PRIMARY KEY, metal ENUM('Gold','Silver') NOT NULL, purity VARCHAR(60) NOT NULL,
+ pricePaise BIGINT UNSIGNED NOT NULL, taxBasis VARCHAR(30) NOT NULL, source VARCHAR(120) NOT NULL,
+ updatedAt DATETIME NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE
+) ENGINE=InnoDB;
+
+-- Additive only. Historical SIP rows, balances and banner data are preserved.
+CREATE TABLE gold_purchases (
+ id VARCHAR(36) NOT NULL PRIMARY KEY,
+ userId VARCHAR(36) NOT NULL,
+ rateId VARCHAR(36) NOT NULL,
+ grams BIGINT UNSIGNED NOT NULL,
+ amountPaise BIGINT UNSIGNED NOT NULL,
+ reference VARCHAR(120) NOT NULL,
+ status ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING',
+ allocationRef VARCHAR(190) NULL,
+ note VARCHAR(500) NULL,
+ createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ reviewedAt DATETIME NULL,
+ reviewedBy VARCHAR(36) NULL,
+ UNIQUE KEY gold_purchase_reference(reference),
+ UNIQUE KEY gold_purchase_allocation(allocationRef),
+ INDEX gold_purchase_user_date(userId,createdAt),
+ CONSTRAINT gold_purchase_user_fk FOREIGN KEY(userId) REFERENCES users(id),
+ CONSTRAINT gold_purchase_rate_fk FOREIGN KEY(rateId) REFERENCES rates(id),
+ CONSTRAINT gold_purchase_positive CHECK(grams>0 AND amountPaise>0)
+) ENGINE=InnoDB;
+CREATE TABLE trade_references (
+ kind VARCHAR(20) NOT NULL,
+ value VARCHAR(190) NOT NULL,
+ recordId VARCHAR(36) NOT NULL,
+ PRIMARY KEY(kind,value)
+) ENGINE=InnoDB;
+-- Keep existing bank and allocation references protected from reuse by new buys.
+INSERT INTO trade_references(kind,value,recordId) SELECT 'PAYMENT',reference,id FROM payments;
+INSERT INTO trade_references(kind,value,recordId) SELECT 'ALLOCATION',allocationRef,id FROM payments WHERE allocationRef IS NOT NULL;
+
+-- Preserve all existing Gold balances and records.
+ALTER TABLE accounts ADD silverGrams BIGINT UNSIGNED NOT NULL DEFAULT 0, ADD silverReserved BIGINT UNSIGNED NOT NULL DEFAULT 0, ADD CONSTRAINT silver_reservation CHECK(silverReserved<=silverGrams);
+ALTER TABLE ledger ADD metal ENUM('Gold','Silver') NOT NULL DEFAULT 'Gold';
+
+-- Add a current-publication pointer without rewriting any historical quotes/trades.
+CREATE TABLE rate_publications (
+ metal ENUM('Gold','Silver') NOT NULL PRIMARY KEY,
+ rateId VARCHAR(36) NOT NULL UNIQUE,
+ CONSTRAINT rate_publication_rate_fk FOREIGN KEY(rateId) REFERENCES rates(id)
+) ENGINE=InnoDB;
+INSERT INTO rate_publications(metal,rateId)
+ SELECT r.metal,r.id FROM rates r WHERE r.id=(SELECT latest.id FROM rates latest WHERE latest.metal=r.metal ORDER BY latest.createdAt DESC,latest.id DESC LIMIT 1);

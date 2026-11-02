@@ -56,6 +56,7 @@ model User {
   role          Role           @default(USER)
   active        Boolean        @default(true)
   createdAt     DateTime?      @default(now()) @db.Timestamp(0)
+  goldPurchases GoldPurchase[]
   manualKyc     ManualKyc?
   sessions      Session[]
   shop          Shop?
@@ -92,6 +93,12 @@ model Category {
 
 model Product {
   id          String   @id @db.VarChar(60)
+  productCode String @default("") @db.VarChar(80)
+  brand String @default("") @db.VarChar(120)
+  colour String @default("") @db.VarChar(80)
+  availability String @default("Contact store") @db.VarChar(160)
+  certifiedBy String @default("") @db.VarChar(160)
+  featured Boolean @default(false)
   name        String   @db.VarChar(160)
   metal       Metal
   categoryId  String   @db.VarChar(36)
@@ -119,12 +126,14 @@ model Shop {
 }
 
 model Rate {
+  publication RatePublication?
   id        String    @id @db.VarChar(36)
   metal     Metal
   buyPaise  BigInt    @db.UnsignedBigInt
   sellPaise BigInt    @db.UnsignedBigInt
   source    String    @db.VarChar(120)
   createdAt DateTime? @default(now()) @db.Timestamp(3)
+  purchases GoldPurchase[]
   payments  Payment[]
   sales     Sale[]
 
@@ -157,6 +166,8 @@ model Kyc {
 }
 
 model Account {
+  silverGrams BigInt @default(0) @db.UnsignedBigInt
+  silverReserved BigInt @default(0) @db.UnsignedBigInt
   userId   String @id @db.VarChar(36)
   grams    BigInt @default(0) @db.UnsignedBigInt
   reserved BigInt @default(0) @db.UnsignedBigInt
@@ -226,6 +237,7 @@ model Sale {
 }
 
 model Ledger {
+  metal Metal @default(Gold)
   id          String     @id @db.VarChar(36)
   userId      String     @db.VarChar(36)
   kind        LedgerKind
@@ -288,4 +300,65 @@ model ManualKyc {
   note           String?         @db.VarChar(500)
   user           User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "manual_kyc_ibfk_1")
   @@map("manual_kyc")
+}
+
+model DisplayRate {
+ id String @id @db.VarChar(36)
+ metal Metal
+ purity String @db.VarChar(60)
+ pricePaise BigInt @db.UnsignedBigInt
+ taxBasis String @db.VarChar(30)
+ source String @db.VarChar(120)
+ updatedAt DateTime @db.DateTime(0)
+ active Boolean @default(true)
+ @@map("display_rates")
+}
+
+// Monthly plans/payments remain mapped only to preserve historical records.
+model GoldPurchase {
+ user User @relation(fields:[userId],references:[id],onDelete:NoAction,onUpdate:NoAction,map:"gold_purchase_user_fk")
+ rate Rate @relation(fields:[rateId],references:[id],onDelete:NoAction,onUpdate:NoAction,map:"gold_purchase_rate_fk")
+ id String @id @db.VarChar(36)
+ userId String @db.VarChar(36)
+ rateId String @db.VarChar(36)
+ grams BigInt @db.UnsignedBigInt
+ amountPaise BigInt @db.UnsignedBigInt
+ reference String @unique(map: "gold_purchase_reference") @db.VarChar(120)
+ status PaymentStatus @default(PENDING)
+ allocationRef String? @unique(map: "gold_purchase_allocation") @db.VarChar(190)
+ note String? @db.VarChar(500)
+ createdAt DateTime @default(now()) @db.DateTime(0)
+ reviewedAt DateTime? @db.DateTime(0)
+ reviewedBy String? @db.VarChar(36)
+ @@index([userId,createdAt], map: "gold_purchase_user_date")
+ @@map("gold_purchases")
+}
+model TradeReference {
+ kind String @db.VarChar(20)
+ value String @db.VarChar(190)
+ recordId String @db.VarChar(36)
+ @@id([kind,value])
+ @@map("trade_references")
+}
+
+// Archive mapping only: no banner endpoints, admin controls or carousel remain.
+// Retained so future migrations do not accidentally propose deleting old banner data.
+model Banner {
+ id String @id @db.VarChar(36)
+ title String @db.VarChar(160)
+ subtitle String @db.VarChar(300)
+ image String @db.VarChar(2000)
+ buttonLabel String @db.VarChar(80)
+ target String @db.VarChar(30)
+ sortOrder Int @default(0)
+ active Boolean @default(true)
+ @@map("banners")
+ @@ignore
+}
+
+model RatePublication {
+ metal Metal @id
+ rateId String @unique @db.VarChar(36)
+ rate Rate @relation(fields:[rateId],references:[id],onDelete:NoAction,onUpdate:NoAction,map:"rate_publication_rate_fk")
+ @@map("rate_publications")
 }

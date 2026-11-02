@@ -1,6 +1,7 @@
 import React from 'react';
 import { RateCalculatorScreen } from '../screens/calculator/RateCalculatorScreen';
-import { Text } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import { Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { HeaderBrand } from '../components/ui';
 import { colors } from '../constants/theme';
@@ -47,7 +48,7 @@ export function MainTabs() {
       <Tabs.Screen
         name="RatesTab"
         component={RatesScreen}
-        options={{ title: 'Metal Rates', tabBarLabel: 'Rates', tabBarIcon: icon('₹') }}
+        options={{ title: 'Gold Rate', tabBarLabel: 'Gold Rate', tabBarLabelStyle:{fontWeight:'800',color:colors.maroon}, tabBarIcon: () => <View style={{backgroundColor:colors.goldLight,borderRadius:28,padding:8,marginTop:-12,borderWidth:2,borderColor:colors.maroon}}><Svg width={28} height={25} viewBox="0 0 32 28"><Path d="M8 5h16l6 18H2L8 5Z M8 5l4 18 M24 5l-4 18 M2 23h28" fill="#D4AF37" stroke={colors.maroon} strokeWidth={2}/></Svg></View> }}
       />
       <Tabs.Screen
         name="CalculatorTab"

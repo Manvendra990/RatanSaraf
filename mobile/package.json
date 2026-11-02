@@ -8,7 +8,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
-    "export": "expo export --platform all"
+    "export": "expo export --platform all",
+    "test:kyc": "tsc src/utils/kycStatus.ts --outDir .test-build --module commonjs --target es2022 --skipLibCheck && node --test test/kyc-status.test.cjs",
+    "test:trading": "tsc src/utils/tradeHistory.ts --outDir .test-build --module commonjs --target es2022 --skipLibCheck && node --test test/trade-history.test.cjs"
   },
   "dependencies": {
     "react": "19.3.0",

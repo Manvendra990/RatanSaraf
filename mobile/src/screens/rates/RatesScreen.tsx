@@ -11,6 +11,7 @@ import { inr } from '../../utils/format';
 
 import { getMetalHistory, type HistoryPoint } from '../../services/metalHistory';
 import { messageOf, quoteTime } from '../../services/metalPrices';
+import { useStoreRates } from '../../hooks/useStoreRates';
 import { useMetalPrices } from '../../hooks/useMetalPrices';
 import { dayLabel, MetalPriceChart, usd } from '../../components/MetalPriceChart';
 
@@ -19,6 +20,8 @@ export function RatesScreen() {
   const [metal, setMetal] = useState<Metal>(route.params?.metal ?? 'Gold');
   const [days, setDays] = useState<7 | 14 | 30>(30);
   const prices = useMetalPrices();
+  const store = useStoreRates();
+  const storeRate = store.rates.find(r=>r.metal===metal);
   const [history, setHistory] = useState<{ key: string; points: HistoryPoint[] } | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
   const [chartLoading, setChartLoading] = useState(true);
@@ -42,8 +45,16 @@ export function RatesScreen() {
   const low = values.length ? Math.min(...values.map(p => p.low ?? p.close)) : null;
   return (
     <Screen>
-      <Heading>Metal Rates</Heading>
+      <Heading>Gold & Silver Rates</Heading>
       <MetalToggle value={metal} onChange={setMetal} />
+      <View style={[styles.card,{backgroundColor:colors.maroon}]}>
+        <Text style={{color:colors.onDark,fontSize:12,fontWeight:'700'}}>CURRENT STORE {metal.toUpperCase()} RATE</Text>
+        <Text style={[styles.value,{color:colors.onDark}]}>{storeRate ? inr(Number(storeRate.buyPaise)/100) : '—'} <Text style={styles.unit}>/ gram</Text></Text>
+        <Text style={{color:colors.onDark,marginTop:10}}>One rate for buy, sell & current value</Text>
+        {storeRate&&<Text style={{color:colors.onDark,fontSize:11,marginTop:8}}>Updated {new Date(storeRate.createdAt).toLocaleString()}</Text>}
+        {!!store.error&&<Text style={{color:'#FFD8CE',marginTop:10}}>{store.error} · Last received rate may be outdated.</Text>}
+        <Button title={store.loading?'Refreshing…':'Refresh Store Rate'} variant="secondary" onPress={()=>void store.refresh().catch(()=>{})}/>
+      </View>
       <View style={styles.card}>
         <Caption>OROPOCKET · BUY RATE · INR/GRAM</Caption>
         <Text style={styles.value}>{rate ? inr(rate.buy) : '—'} <Text style={styles.unit}>/ gram</Text></Text>

@@ -19,12 +19,12 @@ export function ProductCard({ product, onPress }: Props) {
       <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${product.name}`} activeOpacity={0.9} onPress={onPress}>
       <ProductImage product={product} style={styles.image} />
       <Text numberOfLines={2} style={styles.name}>
-        {product.name}
+        {product.productCode || product.name}
       </Text>
       <Text style={styles.meta}>
         {product.purity} · {product.weight}
       </Text>
-      <Text style={styles.price}>{inr(product.price)}</Text>
+      <Text style={styles.price}>{product.coinWeight ? inr(product.price || 0) : (product.availability || 'Contact for availability')}</Text>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => toggle(product.id)} style={styles.save} hitSlop={8}>
         <Text style={styles.saveText}>{saved ? '♥ Saved' : '♡ Save'}</Text>

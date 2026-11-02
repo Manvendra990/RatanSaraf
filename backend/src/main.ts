@@ -11,6 +11,7 @@ import { rateLimit } from 'express-rate-limit';
 import { ApiController, AdminController, AuthController } from './routes';
 import { PrismaService, prisma } from './prisma.service';
 import { ManualKycController } from './manual-kyc';
+import { GoldController, GoldAdminController } from './gold-trades';
 import { Auth, Admin } from './auth';
 @Catch()
 class Errors implements ExceptionFilter {
@@ -24,14 +25,15 @@ class Errors implements ExceptionFilter {
   res.status(500).json({message:'Unable to complete request. Please retry.'});
  }
 }
-@Module({imports:[JwtModule.register({secret:process.env.JWT_SECRET, signOptions:{expiresIn:'8h'}})],controllers:[ApiController,AdminController,AuthController,ManualKycController],providers:[Auth,Admin,{provide:PrismaService,useValue:prisma}]})
+@Module({imports:[JwtModule.register({secret:process.env.JWT_SECRET, signOptions:{expiresIn:'8h'}})],controllers:[ApiController,AdminController,AuthController,ManualKycController,GoldController,GoldAdminController],providers:[Auth,Admin,{provide:PrismaService,useValue:prisma}]})
 class AppModule {}
 async function main() {
  if(!process.env.DATABASE_URL || !process.env.JWT_SECRET || process.env.JWT_SECRET.length<32 || /REPLACE|CHANGE/.test(process.env.JWT_SECRET)) throw new Error('Set DATABASE_URL and a random JWT_SECRET (32+ characters)');
  if(process.env.NODE_ENV==='production' && (!process.env.ADMIN_ORIGIN?.startsWith('https://') || !process.env.PUBLIC_API_URL?.startsWith('https://'))) throw new Error('Production requires HTTPS ADMIN_ORIGIN and PUBLIC_API_URL');
  if(process.env.KYC_API_URL && !process.env.KYC_API_URL.startsWith('https://')) throw new Error('KYC_API_URL must use HTTPS');
  const app = await NestFactory.create(AppModule, {rawBody:true});
- app.setGlobalPrefix('api'); app.use(helmet({crossOriginResourcePolicy:{policy:'cross-origin'}}));
+ app.setGlobalPrefix('api');
+ app.use('/api',(_req:any,res:any,next:any)=>{res.setHeader('Cache-Control','no-store');next();}); app.use(helmet({crossOriginResourcePolicy:{policy:'cross-origin'}}));
  app.use('/media',express.static(join(process.cwd(),'uploads'),{dotfiles:'deny',fallthrough:false})); app.use(cookieParser());
  const origin=process.env.ADMIN_ORIGIN || 'http://localhost:5173';
  app.enableCors({origin,credentials:true});

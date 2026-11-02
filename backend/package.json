@@ -29,7 +29,8 @@
     "predb:baseline:check": "node scripts/check-env.cjs",
     "kyc:key": "node scripts/init-kyc-key.cjs",
     "db:upgrade": "node --import tsx scripts/upgrade-db.ts",
-    "predb:upgrade": "node scripts/check-env.cjs"
+    "predb:upgrade": "node scripts/check-env.cjs",
+    "test:migration": "node --import tsx scripts/migration.direct.mysql.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

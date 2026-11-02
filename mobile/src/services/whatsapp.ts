@@ -26,7 +26,7 @@ export async function enquire(items: Product[], quantities: Record<string, numbe
     `Hello ${STORE.name}, I am interested in the following products:`,
     ...items.map(
       p =>
-        `• ${p.name} (${p.id}) | ${p.purity} | ${p.weight} | Qty ${quantities[p.id] ?? 1} | Indicative price ${inr(p.price)}`,
+        `• ${p.name} ${p.productCode ? `— ${p.productCode}` : ''} | ${p.purity} | ${p.weight} | Qty ${quantities[p.id] ?? 1} ${p.coinWeight ? `| Indicative price ${inr(p.price || 0)}` : ''}`,
     ),
     'Please confirm availability and final price.',
   ].join('\n');

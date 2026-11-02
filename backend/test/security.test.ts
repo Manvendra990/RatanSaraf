@@ -8,7 +8,11 @@ test('HTTP guards reject admin access and unsigned identity callbacks',async()=>
  try {
   let ready=false;for(let i=0;i<60;i++){try{const r=await fetch(base+'/health');ready=r.ok;if(ready)break;}catch{}await new Promise(r=>setTimeout(r,100));}
   assert.ok(ready,'Server must start');
-  assert.equal((await fetch(base+'/admin/overview')).status,401);
+  for(const path of ['/admin/overview','/admin/displayrates','/admin/purchases']) assert.equal((await fetch(base+path)).status,401);
+  assert.equal((await fetch(base+'/admin/banners')).status,404);
+  for(const path of ['/admin/displayrates']) assert.equal((await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,403);
+  assert.equal((await fetch(base+'/admin/banners',{method:'POST',headers:{'Content-Type':'application/json','Origin':'http://localhost:5173'},body:'{}'})).status,404);
+  assert.equal((await fetch(base+'/gold/purchases',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
   assert.equal((await fetch(base+'/manual-kyc/admin')).status,401);
   assert.equal((await fetch(base+'/manual-kyc/550e8400-e29b-41d4-a716-446655440000/document')).status,401);
   assert.equal((await fetch(base+'/admin/rates',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,403);

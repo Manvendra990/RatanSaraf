@@ -30,7 +30,7 @@ export function LoginScreen({ navigation }: Props) {
       <Button title="Continue as Guest" variant="secondary" onPress={() => navigation.replace('Main')} />
       <Button title="Create Account" variant="secondary" onPress={() => navigation.navigate('Register')} />
       <Caption style={{ textAlign: 'center', marginTop: 20 }}>
-        Sign in to save your wishlist, cart and Gold SIP records.
+        Sign in to save your wishlist, cart and gold buy/sell records.
       </Caption>
     </Screen>
   );

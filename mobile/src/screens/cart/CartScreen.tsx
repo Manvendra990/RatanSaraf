@@ -17,7 +17,7 @@ export function CartScreen() {
   const lines = cart
     .map(x => ({ p: findProduct(x.id), qty: x.qty }))
     .filter((x): x is { p: Product; qty: number } => !!x.p);
-  const subtotal = lines.reduce((n, x) => n + x.p.price * x.qty, 0);
+  const subtotal = lines.reduce((n, x) => n + (x.p.coinWeight ? (x.p.price || 0) * x.qty : 0), 0);
 
   return (
     <Screen>
@@ -27,7 +27,7 @@ export function CartScreen() {
           <ProductImage product={p} style={styles.thumb} />
           <View style={styles.flex}>
             <Text style={styles.name}>{p.name}</Text>
-            <Text style={styles.price}>{inr(p.price)}</Text>
+            <Text style={styles.price}>{p.coinWeight ? inr(p.price || 0) : 'Contact for availability'}</Text>
             <View style={styles.qtyRow}>
               <TouchableOpacity onPress={() => change(p.id, -1)} style={styles.qtyBtn}>
                 <Text style={styles.qtyIcon}>−</Text>
@@ -43,7 +43,7 @@ export function CartScreen() {
 
       {lines.length ? (
         <>
-          <Subheading>Estimated Subtotal: {inr(subtotal)}</Subheading>
+          {lines.every(x => !!x.p.coinWeight) ? <Subheading>Estimated Subtotal: {inr(subtotal)}</Subheading> : <Subheading>Request a quote from the store</Subheading>}
           <Caption>Taxes, making charges and final price must be confirmed with the store.</Caption>
           <Button title="Proceed to WhatsApp Enquiry" variant="whatsapp" onPress={() => enquire(lines.map(x => x.p), Object.fromEntries(lines.map(x => [x.p.id, x.qty])))} />
         </>
