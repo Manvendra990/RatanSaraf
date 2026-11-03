@@ -1,33 +1,28 @@
-# Validation performed for this source delivery
+# Verification — 2 November 2026 single store rate and history update
 
-## Passed
-- Manual review: AES-GCM encryption/tampering tests, document signature checks, consent/status-injection validation and private route authentication.
-- Prisma 6.19.0 schema validation, Client generation and model-to-SQL generation.
-- Backend npm audit: zero known vulnerabilities at generation time after tested dependency overrides.
-- Typechecks include seed, migration/baseline tools and tests.
-- Expo mobile TypeScript check.
-- Expo Android and iOS Metro/Hermes production bundle export (JavaScript/assets, not signed APK/IPA builds).
-- React admin TypeScript check and Vite production build.
-- NestJS TypeScript build and HTTP startup.
-- Eleven automated backend tests (including safe Prisma parameter binding, bigint/decimal/date/JSON serialization and configuration checks): decimal input validation, no-overcredit/no-overpay rounding, month-end/leap-year due dates, and HTTP guards (unauthenticated admin, trusted-origin enforcement, unsigned KYC rejection, attempted role injection on signup).
-- Manual-review admin browser check with mocked API: private document opening, approval disabled until document access, review note and decision submission.
-- Admin browser smoke check with mocked API: overview render, product form, save feedback and 390px responsive viewport. No browser runtime errors in that path. This was a UI test, not a database integration test.
-- Original uploaded theme tokens, rate screen, chart and existing external metal-price/history service files preserved byte-for-byte.
+Executed on this source:
 
-## Not completed in this environment
-- Actual MySQL schema/migration/legacy-baseline/seed execution and concurrent database transaction tests. A dedicated MySQL suite is included in backend/scripts/integration.mysql.ts; run it against a separate *_test database before real use. It covers concurrent duplicate approval, oversell/reservation prevention and repeated payout processing.
-- Physical Android/iPhone, simulators, signed EAS builds and app store submission.
-- Real KYC provider onboarding, provider-specific adapter implementation and Aadhaar verification.
-- Real bank payment matching, gold custody/allocation evidence and customer payouts.
-- External OroPocket/goldprice.dev availability, account entitlement and data licensing.
-- Live production deployment, backup restoration and load testing.
+- Backend typecheck/build, Prisma 6.19.0 generation/validation, 15 backend tests: PASS.
+- Mobile typecheck, 5 KYC state tests, 3 history tests: PASS. History covers newest-first buy/sell ordering, pending/approved/paid/rejected sells, Gold/Silver separation and historical SIP payments.
+- React admin production build: PASS.
+- Android and iOS Metro/Hermes exports: PASS. This is not a signed APK/IPA or physical-device test.
+- Real isolated MySQL API integration: PASS. Shared Home/trading current rate, optional legacy sell input ignored, same rate used for payout/valuation, rapid same-timestamp publication order, no-store responses, superseded-rate rejection, historical accepted amounts retained, retired display-rate writes, pending/direct Gold sell rows returned, manual requests with payments disabled, Silver 5g buy / 2g sell / 3g remaining, independent Gold balance, KYC, roles, exact arithmetic, retry/concurrent approvals, duplicate allocations, oversell protection and payout/rejection transitions.
+- Real forward Prisma migration on an isolated MySQL database: PASS. Existing users, gold balances, plans, payments, ledger, banners remain; Silver starts zero; current publication pointer is initialized from the previously selected rate. Repeated deploy is a safe no-op.
+- Chromium admin browser smoke with mocked API: PASS. Current Store Rates form saves only one amount, separate Sell payout and Display Rates controls absent, metal filters, buy approve/reject, sale approval/payout, no visible UUIDs.
 
-Do not interpret successful source builds as confirmation that these external services or real financial flows have been verified. No real identity or financial transaction was performed during generation.
+Not tested: your Windows MySQL, your physical phone/installed APK, real bank transfers/custody, external KYC verification or real customer records. The generated design preview is illustrative, not evidence of a running app.
 
+Reproduce from the respective folders:
 
-## Current uploaded source update: calculator + simplified Prisma upgrade
-- Compared the supplied ZIP against the manual KYC/Prisma implementation; retained unchanged mobile source/assets and existing business flows.
-- Calculator arithmetic: six checks passed (making discount, full discount and rejected invalid input cases).
-- Backend eleven automated tests passed; backend/mobile typechecks and admin production build passed.
-- db:upgrade detects migration history and delegates existing legacy databases to the guarded baseline checker; no destructive/reset commands included. Its real database path still requires local MySQL testing.
-- Calculator uses manually entered purity-specific rates and an editable tax estimate; it does not publish market quotes.
+```
+backend: npm run typecheck
+backend: npm test
+backend: npm run prisma:validate
+admin: npm run build
+mobile: npm run typecheck
+mobile: npm run test:kyc
+mobile: npm run test:trading
+mobile: npx expo export --platform all
+```
+
+Database tests require NEW EMPTY isolated databases ending in _test, with TEST_DATABASE_URL / TEST_MIGRATION_DATABASE_URL. Run npm run test:mysql / npm run test:migration from backend. Never point tests at the customer database. Neither suite clears an existing database.

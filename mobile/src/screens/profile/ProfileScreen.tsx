@@ -14,7 +14,7 @@ export function ProfileScreen() {
       <Heading>My Profile</Heading>
       <Caption style={{ marginBottom: 20 }}>{auth.user ? `${auth.user.name} · ${auth.user.email}` : 'Guest account'}</Caption>
 
-      <ListRow label="Gold SIP Yojana" onPress={() => navigation.navigate('Sip')} />
+      <ListRow label="Gold Buy & Sell" onPress={() => navigation.navigate('Sip')} />
       <ListRow label="My Enquiries" hint={PENDING_BACKEND} />
       <ListRow label="My Orders" hint={PENDING_BACKEND} />
       <ListRow label="Wishlist" onPress={() => navigation.navigate('Wishlist')} />

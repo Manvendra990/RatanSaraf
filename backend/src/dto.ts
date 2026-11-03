@@ -2,14 +2,17 @@ import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, Length, Matches,
 export class Login { @IsString() @Length(3,190) login!: string; @IsString() @Length(8,72) password!: string; }
 export class Register extends Login { @IsString() @Length(2,120) name!: string; @IsEmail() @MaxLength(190) email!: string; @Matches(/^\+?[0-9]{10,15}$/) phone!: string; }
 export class Category { @IsString() @Length(1,100) name!: string; @IsIn(['Gold','Silver']) metal!: string; @IsBoolean() active!: boolean; }
-export class ProductDto { @IsString() @Length(1,160) name!: string; @IsIn(['Gold','Silver']) metal!: string; @IsUUID() categoryId!: string; @Matches(/^\d+(\.\d{1,2})?$/) price!: string; @IsString() @Length(1,60) weight!: string; @IsString() @Length(1,60) purity!: string; @IsString() @MaxLength(2000) image!: string; @IsString() @MaxLength(10000) description!: string; @IsOptional() @Matches(/^\d+(\.\d{1,3})?$/) coinWeight?: string; @IsInt() @Min(0) @Max(1000000) stock!: number; @IsBoolean() active!: boolean; }
-export class Rate { @IsIn(['Gold','Silver']) metal!: string; @Matches(/^\d+(\.\d{1,2})?$/) buy!: string; @Matches(/^\d+(\.\d{1,2})?$/) sell!: string; @IsString() @Length(2,120) source!: string; }
-export class Plan { @IsString() @Length(2,100) name!: string; @IsIn([1,3,12]) months!: number; @Matches(/^\d+(\.\d{1,2})?$/) minimum!: string; @IsBoolean() active!: boolean; }
-export class Subscribe { @IsUUID() planId!: string; @Matches(/^\d+(\.\d{1,2})?$/) amount!: string; }
-export class Payment { @IsUUID() subscriptionId!: string; @IsUUID() rateId!: string; @IsString() @Length(6,120) reference!: string; }
+export class ProductDto {
+ @IsOptional() @IsString() @MaxLength(80) productCode?:string;
+ @IsOptional() @IsString() @MaxLength(120) brand?:string;
+ @IsOptional() @IsString() @MaxLength(80) colour?:string;
+ @IsOptional() @IsString() @MaxLength(160) availability?:string;
+ @IsOptional() @IsString() @MaxLength(160) certifiedBy?:string;
+ @IsOptional() @IsBoolean() featured?:boolean;
+ @IsString() @Length(1,160) name!: string; @IsIn(['Gold','Silver']) metal!: string; @IsUUID() categoryId!: string; @Matches(/^\d+(\.\d{1,2})?$/) price!: string; @IsString() @Length(1,60) weight!: string; @IsString() @Length(1,60) purity!: string; @IsString() @MaxLength(2000) image!: string; @IsString() @MaxLength(10000) description!: string; @IsOptional() @Matches(/^\d+(\.\d{1,3})?$/) coinWeight?: string; @IsInt() @Min(0) @Max(1000000) stock!: number; @IsBoolean() active!: boolean; }
+export class Rate { @IsIn(['Gold','Silver']) metal!: string; @Matches(/^\d+(\.\d{1,2})?$/) buy!: string; @IsOptional() @Matches(/^\d+(\.\d{1,2})?$/) sell?: string; @IsString() @Length(2,120) source!: string; }
 export class Sale { @IsUUID() rateId!: string; @Matches(/^\d+(\.\d{1,6})?$/) grams!: string; @IsString() @Length(5,500) payoutDetails!: string; }
 export class Decision { @IsIn(['APPROVE','REJECT','PAID']) action!: string; @IsOptional() @IsString() @Length(3,190) reference?: string; @IsString() @Length(3,500) note!: string; }
-export class SubscriptionStatus { @IsIn(['ACTIVE','PAUSED','CANCELLED']) status!: string; }
 export class KycConsent { @IsIn([true]) consent!: boolean; }
 export class KycResult { @IsUUID() reference!: string; @IsString() @Length(1,190) providerRef!: string; @IsIn(['VERIFIED','REJECTED']) status!: string; }
 export class Enquiry { @IsString() @Length(1,60) productId!: string; @IsString() @Length(1,1000) message!: string; }
@@ -48,4 +51,19 @@ export class ManualKycDecision {
  @IsInt() @Min(1) version!:number;
  @IsIn(['APPROVE','REJECT']) action!:string;
  @IsString() @Length(3,500) note!:string;
+}
+
+export class DisplayRateDto {
+ @IsIn(['Gold','Silver']) metal!:string;
+ @IsIn(['999','916','750','585','375']) purity!:string;
+ @Matches(/^\d+(\.\d{1,2})?$/) price!:string;
+ @IsIn(['BEFORE_GST','INCLUDING_GST']) taxBasis!:string;
+ @IsString() @Length(2,120) source!:string;
+ @IsBoolean() active!:boolean;
+}
+
+export class GoldBuy {
+ @IsUUID() rateId!:string;
+ @IsInt() @Min(1) @Max(10000) grams!:number;
+ @IsString() @Length(6,120) reference!:string;
 }

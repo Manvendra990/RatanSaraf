@@ -21,7 +21,7 @@ export function ListingScreen() {
       p.category !== 'Coins' &&
       (!metal || p.metal === metal) &&
       (!category || p.category === category) &&
-      p.name.toLowerCase().includes(search.toLowerCase()),
+      `${p.name} ${p.productCode || ''}`.toLowerCase().includes(search.toLowerCase()),
   );
 
   const title = category ? `${metal ?? ''} ${category}`.trim() : metal ? `${metal} Jewellery` : 'All Jewellery';
@@ -35,7 +35,7 @@ export function ListingScreen() {
           <ProductCard key={p.id} product={p} onPress={() => navigation.navigate('Product', { id: p.id })} />
         ))}
       </Grid>
-      {!result.length && <Empty label="No matching jewellery in the demo catalogue." />}
+      {!result.length && <Empty label="No matching jewellery in the collection." />}
     </Screen>
   );
 }

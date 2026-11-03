@@ -24,11 +24,9 @@ const tabs = [
   "Products",
   "Categories",
   "Rates",
-  "Plans",
   "Customers",
   "KYC",
-  "Subscriptions",
-  "Payments",
+  "Gold Buys",
   "Sales",
   "Ledger",
   "Enquiries",
@@ -36,8 +34,14 @@ const tabs = [
   "Audit",
 ];
 const endpoint = (tab: string) =>
-  (({ Customers: "users", KYC: "kyc" }) as Record<string, string>)[tab] ||
+  (({ Customers: "users", KYC: "kyc", "Gold Buys": "purchases" }) as Record<string, string>)[tab] ||
   tab.toLowerCase();
+const kycVersion = (value: unknown) => {
+  const version = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(version) || version < 1)
+    throw new Error("Unable to read the KYC submission version. Reload and try again.");
+  return version;
+};
 type Field = { key: string; label: string; type?: string; options?: string[] };
 const forms: Record<string, Field[]> = {
   Settings: [
@@ -56,10 +60,16 @@ const forms: Record<string, Field[]> = {
     { key: "phone", label: "Phone with country code" },
   ],
   Products: [
+    { key: "productCode", label: "Product code (customer-facing)" },
+    { key: "brand", label: "Brand" },
+    { key: "colour", label: "Colour" },
+    { key: "availability", label: "Availability message" },
+    { key: "certifiedBy", label: "Certification (only if applicable)" },
+    { key: "featured", label: "Featured on homepage (Gold jewellery)", type: "checkbox" },
     { key: "name", label: "Product name" },
     { key: "metal", label: "Metal", options: ["Gold", "Silver"] },
     { key: "categoryId", label: "Category", type: "category" },
-    { key: "price", label: "Price (₹)", type: "number" },
+    { key: "price", label: "Internal estimate / coin price (₹)", type: "number" },
     { key: "weight", label: "Weight (e.g. 1 gram)" },
     { key: "purity", label: "Purity" },
     { key: "image", label: "Image URL", type: "url" },
@@ -79,16 +89,10 @@ const forms: Record<string, Field[]> = {
   ],
   Rates: [
     { key: "metal", label: "Metal", options: ["Gold", "Silver"] },
-    { key: "buy", label: "Buy price ₹/gram (all-in)", type: "number" },
-    { key: "sell", label: "Sell payout ₹/gram (net)", type: "number" },
+    { key: "buy", label: "Current store rate ₹ / gram (buy & sell)", type: "number" },
     { key: "source", label: "Rate source / store reference" },
   ],
-  Plans: [
-    { key: "name", label: "Plan name" },
-    { key: "months", label: "Frequency", options: ["1", "3", "12"] },
-    { key: "minimum", label: "Minimum instalment ₹", type: "number" },
-    { key: "active", label: "Open for new enrolment", type: "checkbox" },
-  ],
+
 };
 const defaultForm = (tab: string) =>
   Object.fromEntries(
@@ -103,6 +107,7 @@ function App() {
     [ready, setReady] = useState(false),
     [login, setLogin] = useState(""),
     [password, setPassword] = useState("");
+  const [metalFilter,setMetalFilter]=useState("Gold");
   const [tab, setTab] = useState("Overview"),
     [data, setData] = useState<any>(null),
     [categories, setCategories] = useState<any[]>([]),
@@ -143,7 +148,7 @@ function App() {
             ? "/sip/rates"
             : tab === "KYC"
               ? "/manual-kyc/admin"
-              : "/admin/" + endpoint(tab),
+              : "/admin/" + endpoint(tab) + (tab === "Overview" ? "?metal="+metalFilter : ""),
         ),
         api("/admin/categories"),
       ]);
@@ -162,7 +167,7 @@ function App() {
     setEditing(null);
     setNotice("");
     if (user) void load();
-  }, [tab, user]);
+  }, [tab, user, metalFilter]);
   async function run(fn: () => Promise<void>) {
     if (busy) return;
     setBusy(true);
@@ -183,7 +188,6 @@ function App() {
         b.stock = Number(b.stock);
         if (!b.coinWeight) delete b.coinWeight;
       }
-      if (tab === "Plans") b.months = Number(b.months);
       if (tab === "Settings") {
         b.latitude = Number(b.latitude);
         b.longitude = Number(b.longitude);
@@ -195,17 +199,16 @@ function App() {
       );
       setEditing(null);
       setForm(defaultForm(tab));
-      setNotice("Saved. App catalogue refreshes when screens regain focus.");
+      setNotice("Saved. Store rates refresh in the active mobile app within 10 seconds, or immediately with Refresh.");
       await load();
     });
   }
   function edit(row: any) {
     const b = defaultForm(tab);
     for (const f of forms[tab]) {
-      b[f.key] = f.type === "checkbox" ? !!row[f.key] : (row[f.key] ?? "");
+      b[f.key] = f.type === "checkbox" ? [true, 1, '1'].includes(row[f.key]) : (row[f.key] ?? "");
     }
     if (tab === "Products") b.price = String(row.price);
-    if (tab === "Plans") b.minimum = (Number(row.minPaise) / 100).toFixed(2);
     setEditing(row.id);
     setForm(b);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -264,20 +267,22 @@ function App() {
       </main>
     );
   const cell = (key: string, value: any) =>
-    key.endsWith("Paise")
+    key === 'status' ? <span className={'status-badge status-' + String(value).toLowerCase()}>{value === 'APPROVED' && tab === 'Sales' ? 'APPROVED · Awaiting payout' : String(value)}</span> : key.endsWith("Paise")
       ? `₹${(Number(value) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
       : key === "grams"
         ? `${(Number(value) / 1000000).toFixed(6)} g`
-        : key === "active"
-          ? value
+        : ["active", "featured"].includes(key)
+          ? [true, 1, '1'].includes(value)
             ? "Yes"
             : "No"
-          : String(value ?? "—");
+          : String(value ?? "—").replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "Internal reference");
+  const hasKycVersion = Number.isSafeInteger(Number(kycDetail?.version)) && Number(kycDetail?.version) >= 1;
+  const visibleData=Array.isArray(data)?data.filter((r:any)=>!["Gold Buys","Sales","Ledger"].includes(tab)||(r.metal||"Gold")===metalFilter):[];
   const columns =
     Array.isArray(data) && data.length
       ? Object.keys(data[0]).filter(
           (k) =>
-            !["password", "description", "image", "payoutDetails"].includes(k),
+            !/^(id|actor|version|reviewedBy)$/i.test(k) && !/Id$/.test(k) && !["password", "description", "image", "payoutDetails", "pricingPolicy"].includes(k) && !(tab === "Rates" && k === "sellPaise") && !(tab === "Gold Buys" && k === "reference"),
         )
       : [];
   return (
@@ -296,7 +301,7 @@ function App() {
               disabled={busy}
               onClick={() => setTab(t)}
             >
-              {t}
+              {t === 'Rates' ? 'Current Store Rates' : t === 'Gold Buys' ? 'Metal Buys' : t}
             </button>
           ))}
         </nav>
@@ -349,18 +354,17 @@ function App() {
               ))}
             </section>
             <section className="panel">
-              <h2>Gold SIP operations</h2>
+              <h2>Gold / Silver buy & sell requests</h2>
               <p>
                 Verify merchant bank records before approving a payment. Record
-                a real gold allocation reference before crediting grams.
+                a real metal allocation reference before crediting grams.
               </p>
               <p>
-                Gold sale requests reserve customer gold. Confirm the bank
+                Metal sale requests reserve customer grams. Confirm the bank
                 payout reference before marking a sale paid.
               </p>
               <p>
-                Store trade rates are separate from the app's existing external
-                market-rate display. Publish fresh store rates before accepting
+                Buy, sell and valuation use the same current store rate per metal. No monthly/yearly plans. The live market feed is a separate reference; it cannot change store transaction amounts. Publish fresh store rates before accepting
                 new trades.
               </p>
             </section>
@@ -374,10 +378,7 @@ function App() {
             </h2>
             {tab === "Rates" && (
               <p>
-                Buy = final cost per gram; sell = final payout per gram. No
-                extra charges are applied by this version. Buy quotes valid 15
-                minutes, sell quotes 5 minutes. Publish only rates the shop can
-                honour.
+                Publish one current rate for the selected metal. The same rate is used for new buy requests, sell requests and current holding value. Home and the trading screen refresh within 10 seconds while active. Existing transactions keep their accepted amounts.
               </p>
             )}
             <div className="fields">
@@ -441,6 +442,7 @@ function App() {
                           "description",
                           "whatsapp",
                           "phone",
+                          "productCode", "brand", "colour", "availability", "certifiedBy",
                         ].includes(f.key)
                       }
                       value={form[f.key] ?? ""}
@@ -454,7 +456,7 @@ function App() {
             </div>
             {tab === "Products" && (
               <label>
-                Upload product photo (PNG/JPEG/WebP, max 5 MB)
+                Upload image (PNG/JPEG/WebP, max 5 MB)
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
@@ -494,6 +496,7 @@ function App() {
             )}
           </form>
         )}
+        {tab === "Products" && <p className="notice">Jewellery prices are internal only and hidden in the mobile catalogue, cart and enquiries. Coins retain their indicative prices. Empty specifications stay hidden.</p>}
         {tab === "KYC" && (
           <p className="notice">
             Review customer details and their private PAN document, then approve
@@ -501,10 +504,11 @@ function App() {
             PAN through an external API.
           </p>
         )}
+        {["Overview","Gold Buys","Sales","Ledger"].includes(tab) && <label>Metal <select aria-label="Metal" value={metalFilter} onChange={e=>setMetalFilter(e.target.value)}><option>Gold</option><option>Silver</option></select></label>}
         {Array.isArray(data) && (
           <section className="panel table">
-            <h2>{data.length} record(s)</h2>
-            {!data.length ? (
+            <h2>{visibleData.length} record(s)</h2>
+            {!visibleData.length ? (
               <p>No records yet.</p>
             ) : (
               <table>
@@ -518,7 +522,7 @@ function App() {
                             amountPaise: "Amount",
                             pricePaise: "Price",
                             minPaise: "Minimum",
-                            buyPaise: "Buy ₹/g",
+                            buyPaise: tab === "Rates" ? "Current rate ₹/g" : "Accepted rate ₹/g",
                             sellPaise: "Sell ₹/g",
                             createdAt: "Date",
                             anchorAt: "Started",
@@ -532,7 +536,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((row: any) => (
+                  {visibleData.map((row: any) => (
                     <tr key={row.id}>
                       {tab === "Products" && (
                         <td>
@@ -574,19 +578,19 @@ function App() {
                             Edit
                           </button>
                         )}
-                        {(tab === "Payments" || tab === "Sales") && (
+                        {(tab === "Gold Buys" || tab === "Sales") && (
                           <>
                             {row.status === "PENDING" &&
                               ["APPROVE", "REJECT"].map((a) => (
                                 <button
                                   key={a}
                                   onClick={() => {
-                                    setDecision({ tab, id: row.id, action: a });
+                                    setDecision({ tab, id: row.id, action: a, legacy: row.requestType === 'LEGACY', customerName: row.name, metal: row.metal||"Gold", grams: row.grams, amountPaise: row.amountPaise });
                                     setNote("");
                                     setReference("");
                                   }}
                                 >
-                                  {a}
+                                  {a === 'APPROVE' ? 'Approve' : 'Reject'}
                                 </button>
                               ))}
                             {tab === "Sales" && row.status === "APPROVED" && (
@@ -627,16 +631,17 @@ function App() {
               onSubmit={(e) => {
                 e.preventDefault();
                 void run(async () => {
+                  if (decision.tab === "KYC" && (!Number.isSafeInteger(Number(decision.version)) || Number(decision.version) < 1)) throw new Error("Reopen the latest KYC details before reviewing; submission version is missing.");
                   await api(
                     decision.tab === "KYC"
                       ? `/manual-kyc/admin/${decision.id}/decision`
-                      : `/admin/${decision.tab.toLowerCase()}/${decision.id}/decision`,
+                      : `/admin/${decision.tab === "Gold Buys" ? (decision.legacy ? "payments" : "purchases") : decision.tab.toLowerCase()}/${decision.id}/decision`,
                     "POST",
                     {
                       action: decision.action,
                       note,
                       ...(decision.tab === "KYC"
-                        ? { version: decision.version }
+                        ? { version: kycVersion(decision.version) }
                         : {}),
                       ...(reference ? { reference } : {}),
                     },
@@ -648,26 +653,27 @@ function App() {
             >
               <h2>
                 {decision.action}{" "}
-                {decision.tab === "Payments"
-                  ? "payment"
+                {decision.tab === "Gold Buys"
+                  ? "metal purchase"
                   : decision.tab === "KYC"
                     ? "manual KYC review"
                     : "sale"}
               </h2>
+              {decision.tab === "Gold Buys" && <p><strong>{decision.customerName}</strong> · {decision.metal} · {(Number(decision.grams)/1000000).toFixed(6)} g · ₹{(Number(decision.amountPaise)/100).toLocaleString('en-IN',{minimumFractionDigits:2})}{decision.legacy ? ' · Earlier SIP payment' : ''}</p>}
               <p>
-                {decision.tab === "Payments" && decision.action === "APPROVE"
-                  ? "Confirm bank receipt AND actual gold allocation before approving."
+                {decision.tab === "Gold Buys" && decision.action === "APPROVE"
+                  ? "Confirm bank receipt AND actual metal allocation before approving."
                   : decision.action === "PAID"
                     ? "Confirm money has reached the customer before continuing."
                     : "This action changes the customer record."}
               </p>
-              {((decision.tab === "Payments" &&
+              {((decision.tab === "Gold Buys" &&
                 decision.action === "APPROVE") ||
                 decision.action === "PAID") && (
                 <label>
                   {decision.action === "PAID"
                     ? "Bank payout reference"
-                    : "Gold allocation reference"}
+                    : "Metal allocation reference"}
                   <input
                     required
                     minLength={3}
@@ -768,7 +774,7 @@ function App() {
               {kycDetail.status === "PENDING" && (
                 <div>
                   <button
-                    disabled={!kycDocument || busy}
+                    disabled={!kycDocument || busy || !hasKycVersion}
                     onClick={() => {
                       if (
                         !window.confirm(
@@ -779,7 +785,7 @@ function App() {
                       setDecision({
                         tab: "KYC",
                         id: kycDetail.id,
-                        version: kycDetail.version,
+                        version: kycVersion(kycDetail.version),
                         action: "APPROVE",
                       });
                       setNote("");
@@ -796,7 +802,7 @@ function App() {
                       setDecision({
                         tab: "KYC",
                         id: kycDetail.id,
-                        version: kycDetail.version,
+                        version: kycVersion(kycDetail.version),
                         action: "REJECT",
                       });
                       setNote("");

@@ -1,11 +1,12 @@
-import React, {useState} from 'react';
+import React, {useEffect,useState} from 'react';
 import {Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import {Button, Caption, Screen} from '../../components/ui';
+import {Caption, Screen} from '../../components/ui';
 import {useAuth} from '../../context/AuthContext';
-import {apiMultipart} from '../../services/api';
+import {GoldAction as Button, KycStatusCard} from '../../components/ui/KycStatusCard';
+import {api,apiMultipart} from '../../services/api';
 import {colors} from '../../constants/theme';
 import type {RootStack} from '../../navigation/types';
 const states=['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'];
@@ -13,14 +14,21 @@ export function ManualKycScreen({navigation}:NativeStackScreenProps<RootStack,'M
  const {user}=useAuth();
  const [form,setForm]=useState({name:user?.name||'',email:user?.email||'',country:'India',phone:user?.phone||'',address:'',city:'',pincode:'',state:'Madhya Pradesh',dob:'',spouseDob:'',anniversary:'',pan:''});
  const [stage,setStage]=useState(1),[file,setFile]=useState<DocumentPicker.DocumentPickerAsset|null>(null),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[stateOpen,setStateOpen]=useState(false),[dateField,setDateField]=useState<'dob'|'spouseDob'|'anniversary'|null>(null);
+ const [review,setReview]=useState<any>(null),[reviewLoading,setReviewLoading]=useState(true),[reviewError,setReviewError]=useState('');
+ async function loadReview(){setReviewLoading(true);try{const d=await api('/gold/dashboard');setReview({manual:d.manualKyc,provider:d.kyc});setReviewError('');}catch(e:any){setReviewError(e.message);}finally{setReviewLoading(false);}}
+ useEffect(()=>{if(user)void loadReview();else setReviewLoading(false);},[user?.id]);
  const set=(key:keyof typeof form,value:string)=>setForm(f=>({...f,[key]:value}));
  async function choose(){try{const r=await DocumentPicker.getDocumentAsync({type:['image/jpeg','image/png','application/pdf'],copyToCacheDirectory:true,multiple:false});if(r.canceled)return;const a=r.assets[0];if((a.size||0)>5*1024*1024)throw new Error('Select a file smaller than 5 MB');setFile(a);}catch(e:any){Alert.alert('Upload',e.message);}}
  async function toDocumentBlob(selected:DocumentPicker.DocumentPickerAsset){const response=await fetch(selected.uri);if(!response.ok)throw new Error('Unable to read the selected document');const blob=await response.blob();return blob.slice(0,blob.size,selected.mimeType||'application/pdf');}
  function validate(){if(!form.name.trim()||!form.address.trim()||!form.city.trim()||!form.state||!form.dob)throw new Error('Complete the required personal details');if(!/^[1-9][0-9]{5}$/.test(form.pincode))throw new Error('Enter a valid 6-digit pincode');if(!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan))throw new Error('Enter a valid PAN number');if(!file)throw new Error('Upload your PAN card photo or PDF');}
- async function submit(){if(busy)return;try{validate();if(!consent)throw new Error('Please give consent for the shop to review your details and PAN document');setBusy(true);const body=new FormData();Object.entries(form).forEach(([k,v])=>{if(v)body.append(k,v);});body.append('consent','true');const documentBlob=await toDocumentBlob(file!);body.append('document',documentBlob,file!.name||'pan-document.pdf');await apiMultipart('/manual-kyc/submit',body);Alert.alert('Submitted for review','The shop admin will review your details. You can track the status in Gold SIP.',[{text:'OK',onPress:()=>navigation.goBack()}]);}catch(e:any){Alert.alert('Unable to submit',e.message);}finally{setBusy(false);}}
+ async function submit(){if(busy)return;try{validate();if(!consent)throw new Error('Please give consent for the shop to review your details and PAN document');setBusy(true);const body=new FormData();Object.entries(form).forEach(([k,v])=>{if(v)body.append(k,v);});body.append('consent','true');if(Platform.OS==='web'){const documentBlob=await toDocumentBlob(file!);body.append('document',documentBlob,file!.name||'pan-document.pdf');}else{body.append('document',{uri:file!.uri,name:file!.name||'pan-document.pdf',type:file!.mimeType||'application/pdf'} as any);}await apiMultipart('/manual-kyc/submit',body);Alert.alert('Submitted for review','The shop admin will review your details. You can track the status in Gold Buy & Sell.',[{text:'OK',onPress:()=>navigation.goBack()}]);}catch(e:any){Alert.alert('Unable to submit',e.message);}finally{setBusy(false);}}
  const field=(key:keyof typeof form,label:string,required=false,readOnly=false)=><View style={styles.field}><Text style={styles.label}>{label}{required?'*':''}</Text><TextInput accessibilityLabel={label} value={form[key]} editable={!readOnly&&!busy} onChangeText={v=>set(key,key==='pan'?v.toUpperCase():v)} autoCapitalize={key==='pan'?'characters':key==='email'?'none':'words'} keyboardType={key==='pincode'?'number-pad':key==='email'?'email-address':'default'} maxLength={key==='pan'?10:key==='pincode'?6:500} style={[styles.input,readOnly&&{color:colors.muted}]}/></View>;
  const date=(key:'dob'|'spouseDob'|'anniversary',label:string,required=false)=><Pressable accessibilityRole="button" accessibilityLabel={'Choose '+label} onPress={()=>setDateField(key)} style={styles.date}><View style={{flex:1}}><Text style={styles.label}>{label}{required?'*':''}</Text><Text style={styles.input}>{form[key]||'Select date'}</Text></View><Text style={{fontSize:25,color:colors.maroon}}>▦</Text>{form[key]&&!required&&<Pressable onPress={()=>set(key,'')} accessibilityLabel={'Clear '+label}><Text style={{padding:10}}>×</Text></Pressable>}</Pressable>;
  if(!user)return <Screen><Caption>Please sign in to submit your personal details.</Caption><Button title="Login" onPress={()=>navigation.navigate('Login')}/></Screen>;
+ if(reviewLoading)return <Screen><Caption>Checking your KYC status…</Caption></Screen>;
+ if(reviewError)return <Screen><Caption>{reviewError}</Caption><Button title="Retry KYC status" onPress={()=>void loadReview()}/></Screen>;
+ const reviewApproved=review?.manual?.status==='APPROVED'||review?.provider?.status==='VERIFIED';
+ if(review?.manual?.status==='PENDING'||reviewApproved)return <Screen><KycStatusCard manual={review?.manual?.status} provider={review?.provider?.status} note={review?.manual?.note}/><Button title={reviewApproved?'Continue to Gold Buy & Sell':'Refresh review status'} onPress={()=>reviewApproved?navigation.navigate('Sip'):void loadReview()}/><Button title="Back" variant="secondary" onPress={()=>navigation.goBack()}/></Screen>;
  return <Screen contentStyle={{backgroundColor:colors.paper}}><Text style={styles.intro}>{stage===1?'Kindly enter your personal details for the fields mentioned below':'Review your details before submitting'}</Text>
  {stage===1?<>
  {field('name','Name',true)}{field('email','Email')}{field('country','Country',true,true)}{field('phone','Mobile Number',true,true)}{field('address','Address',true)}

@@ -39,7 +39,7 @@ export function MenuScreen({ navigation }: Props) {
     { label: 'Gold Coins', go: () => navigation.navigate('Coins', { metal: 'Gold' }) },
     { label: 'Silver Coins', go: () => navigation.navigate('Coins', { metal: 'Silver' }) },
     { label: 'Metal Rates (Demo)', go: () => navigation.navigate('Rates', { metal: 'Gold' }) },
-    { label: 'Gold SIP Yojana', go: () => navigation.navigate('Sip') },
+    { label: 'Gold Buy & Sell', go: () => navigation.navigate('Sip') },
     { label: 'My Cart', go: () => navigation.navigate('Cart') },
     { label: 'Wishlist', go: () => navigation.navigate('Wishlist') },
     { label: 'My Profile', go: () => navigation.navigate('Profile') },

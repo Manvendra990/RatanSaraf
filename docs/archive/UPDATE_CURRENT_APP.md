@@ -1,3 +1,5 @@
+Latest dashboard/catalogue update: follow READ_FIRST_20261030.md first.
+
 # Update your current app — keep your data
 
 This ZIP updates the supplied full source. Original assets, theme, product flows and API routes are retained. Changes: Prisma 6.19 database layer, manual admin-reviewed KYC, existing manual SIP/payment/allocation workflow, and a jewellery rate calculator replacing the Wishlist bottom tab. Wishlist remains in the drawer and product buttons.

@@ -1,12 +1,13 @@
 import React from 'react';
 import { ProductImage } from '../../components/ui/ProductImage';
-import { Alert, StyleSheet, Text } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Body, Button, Caption, Empty, Heading, Screen, Subheading } from '../../components/ui';
 import { colors, radius } from '../../constants/theme';
 import { useShop } from '../../context/ShopContext';
 import { useCatalog } from '../../context/CatalogContext';
 import type { RootStack } from '../../navigation/types';
+import { contactStore } from '../../services/whatsapp';
 import { inr } from '../../utils/format';
 
 type Props = NativeStackScreenProps<RootStack, 'Product'>;
@@ -27,8 +28,14 @@ export function ProductDetailsScreen({ navigation, route }: Props) {
       <Caption>
         {product.purity} · {product.weight}
       </Caption>
-      <Text style={styles.price}>{inr(product.price)}</Text>
-      <Caption>Indicative price · Final pricing confirmed by store</Caption>
+      {product.coinWeight ? <Text style={styles.price}>{inr(product.price || 0)}</Text> : <Caption>{product.availability || 'Contact us to check availability'}</Caption>}
+      <Button title="Contact us" variant="secondary" onPress={() => void contactStore()} />
+      <Subheading>Specifications</Subheading>
+      {[
+        ['Product Name', product.name], ['Brand Name', product.brand], ['Product Code', product.productCode],
+        ['Availability', product.availability], ['Product Metal', product.metal], ['Product Purity', product.purity],
+        ['Product Colour', product.colour], ['Net Weight', product.weight], ['Certified by', product.certifiedBy],
+      ].filter(([,v]) => !!v).map(([k,v]) => <View key={k} style={{ flexDirection:'row',justifyContent:'space-between',gap:14,paddingVertical:9 }}><Text style={{color:colors.muted,flex:1}}>{k}</Text><Text style={{color:colors.ink,flex:1,textAlign:'right'}}>{v}</Text></View>)}
 
       <Subheading>Product Description</Subheading>
       <Body>{product.description}</Body>

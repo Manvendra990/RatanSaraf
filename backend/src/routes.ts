@@ -1,26 +1,26 @@
 import { FileInterceptor } from '@nestjs/platform-express';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { Body, Controller, Get, Post, Put, Param, Req, Res, UseGuards, BadRequestException, ForbiddenException, UnauthorizedException, ServiceUnavailableException, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Query, Controller, Get, Post, Put, Param, Req, Res, UseGuards, BadRequestException, ForbiddenException, UnauthorizedException, ServiceUnavailableException, GoneException, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID, createHmac, timingSafeEqual } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { rows, tx, prisma, normalize } from './db';
 import { Auth, Admin, digest } from './auth';
 import * as D from './dto';
-import { parseUnits, buyGrams, sellPaise, display, nextDue } from './money';
+import { currentStoreRates } from './store-rates';
+import { parseUnits, sellPaise, display, nextDue } from './money';
 const id = randomUUID;
 const requireThat = (ok: any, message: string) => { if(!ok) throw new BadRequestException(message); };
 function units(v:string,p:number) { try{return parseUnits(v,p);}catch(e:any){throw new BadRequestException(e.message);} }
 const audit = (db:any, actor:string, action:string, ref:string) => rows('INSERT INTO audit(id,actor,action,referenceId) VALUES(?,?,?,?)',[id(),actor,action,ref],db);
-async function verified(user:string, db?:any) {
+export async function verified(user:string, db?:any) {
  const [k]=await rows("SELECT id FROM kyc WHERE userId=? AND status='VERIFIED' LIMIT 1",[user],db);
  const [m]=await rows("SELECT id FROM manual_kyc WHERE userId=? AND status='APPROVED' LIMIT 1",[user],db);
  if(!k&&!m)throw new ForbiddenException('Complete identity review first');
 }
-async function quote(rateId:string,db:any,maxAge:number) { const [r]=await rows("SELECT *,TIMESTAMPDIFF(SECOND,createdAt,UTC_TIMESTAMP()) AS age FROM rates WHERE id=? AND metal='Gold'",[rateId],db); requireThat(r && r.age<=maxAge,'Quote expired; refresh the Gold SIP rate'); return r; }
-const productSelect='SELECT p.*,c.name AS category FROM products p JOIN categories c ON c.id=p.categoryId';
-function product(p:any) {return {...p,price:Number(p.pricePaise)/100,coinWeight:p.coinWeight===null?undefined:Number(p.coinWeight),active:!!p.active};}
+async function quote(rateId:string,db:any) { const [r]=await rows("SELECT *,TIMESTAMPDIFF(SECOND,createdAt,UTC_TIMESTAMP()) AS age FROM rates r WHERE id=? AND id=(SELECT p.rateId FROM rate_publications p WHERE p.metal=r.metal) ",[rateId],db); requireThat(r && Number(r.age)>=0,'Store rate changed; refresh the current rate'); return r; }
+function product(p:any) {return {...p,price:Number(p.pricePaise)/100,coinWeight:p.category!=='Coins'||p.coinWeight===null?undefined:Number(p.coinWeight),active:!!p.active};}
 @Controller('auth')
 export class AuthController {
  constructor(private jwt:JwtService){}
@@ -47,10 +47,11 @@ export class AuthController {
 export class ApiController {
  @Get('ready') async ready(){try{await rows('SELECT 1 FROM users LIMIT 1');return {ok:true,database:true};}catch{throw new ServiceUnavailableException('Database unavailable or schema not initialized');}}
  @Get('health') health(){return {ok:true,service:'Ratan Lal Saraf API'};}
- @Get('catalog') async catalog(){const [items,categories]=await Promise.all([prisma.product.findMany({where:{active:true,category:{active:true}},include:{category:true}}),prisma.category.findMany({where:{active:true},orderBy:[{metal:'asc'},{name:'asc'}]})]);return {products:items.map(p=>product({...normalize(p),category:p.category.name})),categories:normalize(categories)};}
+ @Get('home') async home(){return {rates:(await currentStoreRates()).map(r=>({...r,pricePaise:r.buyPaise,updatedAt:r.createdAt})),referenceRates:await rows('SELECT * FROM display_rates WHERE active=1 ORDER BY updatedAt DESC,id')};}
+ @Get('catalog') async catalog(){const [items,categories]=await Promise.all([prisma.product.findMany({where:{active:true,category:{active:true}},include:{category:true}}),prisma.category.findMany({where:{active:true},orderBy:[{metal:'asc'},{name:'asc'}]})]);return {products:items.map(p=>{const item=product({...normalize(p),category:p.category.name});if(p.category.name!=='Coins'){delete item.price;delete item.pricePaise;}return item;}),categories:normalize(categories)};}
  @Get('store') async store(){const s=await prisma.setting.findUnique({where:{id:1}});return {...((s?.data as Record<string,unknown>)||{}),paymentInstructions:process.env.MERCHANT_PAYMENT_INSTRUCTIONS,paymentsEnabled:process.env.PAYMENTS_ENABLED==='true',privacyUrl:process.env.PRIVACY_URL||''};}
- @Get('sip/plans') async plans(){return normalize(await prisma.plan.findMany({where:{active:true}}));}
- @Get('sip/rates') async rates(){return rows('SELECT * FROM rates r WHERE r.id=(SELECT x.id FROM rates x WHERE x.metal=r.metal ORDER BY x.createdAt DESC,x.id DESC LIMIT 1)');}
+ @Get('sip/plans') plans(){return [];}
+ @Get(['sip/rates','gold/rates']) async rates(){return currentStoreRates();}
  @Get('shop') @UseGuards(Auth) async shop(@Req() req:any){const [s]=await rows('SELECT cart,favorites FROM shop WHERE userId=?',[req.user.id]);return s||{cart:[],favorites:[]};}
  @Put('shop') @UseGuards(Auth) async saveShop(@Req() req:any,@Body() b:any){
   requireThat(Array.isArray(b.cart)&&Array.isArray(b.favorites)&&b.cart.length<=200&&b.favorites.length<=500,'Invalid shop data');
@@ -60,14 +61,14 @@ export class ApiController {
   await rows('INSERT INTO shop(userId,cart,favorites) VALUES(?,?,?) ON DUPLICATE KEY UPDATE cart=VALUES(cart),favorites=VALUES(favorites)',[req.user.id,JSON.stringify(cart),JSON.stringify([...new Set(b.favorites)])]);return {ok:true};
  }
  @Post('enquiries') @UseGuards(Auth) async enquiry(@Req() req:any,@Body() b:D.Enquiry){await rows('INSERT INTO enquiries(id,userId,productId,message) VALUES(?,?,?,?)',[id(),req.user.id,b.productId,b.message]);return {ok:true};}
- @Get('sip/dashboard') @UseGuards(Auth) async dashboard(@Req() req:any) {
+ @Get(['sip/dashboard','gold/dashboard']) @UseGuards(Auth) async dashboard(@Req() req:any) {
   const u=req.user.id;
   const [a]=await rows('SELECT * FROM accounts WHERE userId=?',[u]);
   const [k]=await rows('SELECT id,status,updatedAt FROM kyc WHERE userId=? ORDER BY consentAt DESC LIMIT 1',[u]);
-  return {balance:display(a?.grams||'0',6),reserved:display(a?.reserved||'0',6),available:display(BigInt(a?.grams||0)-BigInt(a?.reserved||0),6),kyc:k||null,manualKyc:(await rows('SELECT id,status,note,submittedAt,reviewedAt FROM manual_kyc WHERE userId=?',[u]))[0]||null,
-   subscriptions:await rows('SELECT s.*,p.name,p.months FROM subscriptions s JOIN plans p ON p.id=s.planId WHERE s.userId=? ORDER BY s.anchorAt DESC',[u]),
-   payments:await rows('SELECT p.*,r.buyPaise FROM payments p JOIN rates r ON r.id=p.rateId WHERE userId=? ORDER BY p.createdAt DESC',[u]),
-   sales:await rows('SELECT * FROM sales WHERE userId=? ORDER BY createdAt DESC',[u]),ledger:await rows('SELECT * FROM ledger WHERE userId=? ORDER BY createdAt DESC',[u])};
+  return {holdings:{Gold:{balance:display(a?.grams||'0',6),reserved:display(a?.reserved||'0',6),available:display(BigInt(a?.grams||0)-BigInt(a?.reserved||0),6)},Silver:{balance:display(a?.silverGrams||'0',6),reserved:display(a?.silverReserved||'0',6),available:display(BigInt(a?.silverGrams||0)-BigInt(a?.silverReserved||0),6)}},balance:display(a?.grams||'0',6),reserved:display(a?.reserved||'0',6),available:display(BigInt(a?.grams||0)-BigInt(a?.reserved||0),6),kyc:k||null,manualKyc:(await rows('SELECT id,status,note,submittedAt,reviewedAt FROM manual_kyc WHERE userId=?',[u]))[0]||null,
+   purchases:await rows('SELECT g.*,r.metal,r.buyPaise FROM gold_purchases g JOIN rates r ON r.id=g.rateId WHERE g.userId=? ORDER BY g.createdAt DESC,g.id DESC',[u]),
+   payments:await rows('SELECT p.*,r.metal,r.buyPaise FROM payments p JOIN rates r ON r.id=p.rateId WHERE userId=? ORDER BY p.createdAt DESC',[u]),
+   sales:await rows('SELECT s.*,r.metal FROM sales s JOIN rates r ON r.id=s.rateId WHERE s.userId=? ORDER BY s.createdAt DESC',[u]),ledger:await rows('SELECT * FROM ledger WHERE userId=? ORDER BY createdAt DESC',[u])};
  }
  @Post('kyc/start') @UseGuards(Auth) async kyc(@Req() req:any,@Body() b:D.KycConsent) {
   if(!process.env.KYC_API_URL||!process.env.KYC_API_KEY||!process.env.KYC_WEBHOOK_SECRET)throw new ServiceUnavailableException('Aadhaar KYC provider is not configured. Contact the store.');
@@ -84,20 +85,21 @@ export class ApiController {
   const expected=createHmac('sha256',secret).update(`${stamp}.`).update(req.rawBody).digest();if(!timingSafeEqual(expected,Buffer.from(signature,'hex')))throw new UnauthorizedException();
   await tx(async db=>{const [k]=await rows('SELECT * FROM kyc WHERE id=? AND providerRef=? FOR UPDATE',[b.reference,b.providerRef],db);requireThat(k,'Unknown verification');if(k.status!=='PENDING'){requireThat(k.status===b.status,'Verification already finalized');return;}await rows('UPDATE kyc SET status=? WHERE id=?',[b.status,b.reference],db);await audit(db,k.userId,'KYC_'+b.status,k.id);});return {ok:true};
  }
- @Post('sip/subscriptions') @UseGuards(Auth) async subscribe(@Req() req:any,@Body() b:D.Subscribe) {
-  await verified(req.user.id);const [p]=await rows('SELECT * FROM plans WHERE id=? AND active=1',[b.planId]);const amount=units(b.amount,2);requireThat(p&&amount>=BigInt(p.minPaise),'Choose an active plan and meet its minimum');const ref=id();
-  await rows('INSERT INTO subscriptions(id,userId,planId,amountPaise,anchorAt,nextDue) VALUES(?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())',[ref,req.user.id,p.id,amount.toString()]);return {id:ref};
- }
- @Put('sip/subscriptions/:id') @UseGuards(Auth) async subscription(@Req() req:any,@Param('id') ref:string,@Body() b:D.SubscriptionStatus){
-  return tx(async db=>{const [s]=await rows('SELECT * FROM subscriptions WHERE id=? AND userId=? FOR UPDATE',[ref,req.user.id],db);requireThat(s&&s.status!=='CANCELLED','Subscription not found or already cancelled');await rows('UPDATE subscriptions SET status=? WHERE id=?',[b.status,ref],db);return {ok:true};});
- }
- @Post('sip/payments') @UseGuards(Auth) async pay(@Req() req:any,@Body() b:D.Payment) {
-  requireThat(b.reference.trim().length>=6,'Enter a valid bank transaction reference');
-  requireThat(process.env.PAYMENTS_ENABLED==='true','Payments are not yet enabled by the store');
-  return tx(async db=>{await verified(req.user.id,db);const [s]=await rows('SELECT * FROM subscriptions WHERE id=? AND userId=? FOR UPDATE',[b.subscriptionId,req.user.id],db);requireThat(s&&s.status==='ACTIVE','Choose an active SIP');requireThat(!(await rows("SELECT id FROM payments WHERE subscriptionId=? AND status='PENDING'",[s.id],db)).length,'A payment is already pending for this SIP');const r=await quote(b.rateId,db,900);const grams=buyGrams(BigInt(s.amountPaise),BigInt(r.buyPaise));requireThat(grams>0n,'Amount too small');const ref=id();await rows('INSERT INTO payments(id,userId,subscriptionId,reference,rateId,amountPaise,grams) VALUES(?,?,?,?,?,?,?)',[ref,req.user.id,s.id,b.reference.trim(),r.id,s.amountPaise,grams.toString()],db);return {id:ref,grams:display(grams,6)};});
- }
- @Post('sip/sales') @UseGuards(Auth) async sell(@Req() req:any,@Body() b:D.Sale) {
-  return tx(async db=>{await verified(req.user.id,db);const [a]=await rows('SELECT * FROM accounts WHERE userId=? FOR UPDATE',[req.user.id],db);const grams=units(b.grams,6);requireThat(b.payoutDetails.trim().length>=5,'Enter valid payout details');requireThat(a&&grams<=BigInt(a.grams)-BigInt(a.reserved),'Insufficient available gold');const r=await quote(b.rateId,db,300);const amount=sellPaise(grams,BigInt(r.sellPaise));requireThat(amount>0n,'Sale too small');const ref=id();await rows('INSERT INTO sales(id,userId,rateId,grams,amountPaise,payoutDetails) VALUES(?,?,?,?,?,?)',[ref,req.user.id,r.id,grams.toString(),amount.toString(),b.payoutDetails],db);await rows('UPDATE accounts SET reserved=reserved+? WHERE userId=?',[grams.toString(),req.user.id],db);return {id:ref,amount:display(amount,2)};});
+ @Post(['sip/subscriptions','sip/payments']) @UseGuards(Auth) retiredPlans(){throw new GoneException('Monthly/yearly plans are retired. Use Buy Gold by grams at the current store quote.');}
+ @Post(['sip/sales','gold/sales']) @UseGuards(Auth) async sell(@Req() req:any,@Body() b:D.Sale) {
+  return tx(async db=>{
+   await verified(req.user.id,db);
+   const r=await quote(b.rateId,db), silver=r.metal==='Silver';
+   const balance=silver?'silverGrams':'grams',reserved=silver?'silverReserved':'reserved';
+   const [a]=await rows('SELECT * FROM accounts WHERE userId=? FOR UPDATE',[req.user.id],db);
+   const grams=units(b.grams,6);requireThat(grams>0n,'Enter a positive weight');
+   requireThat(b.payoutDetails.trim().length>=5,'Enter valid payout details');
+   requireThat(a&&grams<=BigInt(a[balance])-BigInt(a[reserved]),'Insufficient available '+r.metal);
+   const amount=sellPaise(grams,BigInt(r.buyPaise));requireThat(amount>0n,'Sale too small');const ref=id();
+   await rows('INSERT INTO sales(id,userId,rateId,grams,amountPaise,payoutDetails) VALUES(?,?,?,?,?,?)',[ref,req.user.id,r.id,grams.toString(),amount.toString(),b.payoutDetails],db);
+   await rows(`UPDATE accounts SET ${reserved}=${reserved}+? WHERE userId=?`,[grams.toString(),req.user.id],db);
+   return {id:ref,metal:r.metal,amount:display(amount,2)};
+  });
  }
 }
 @Controller('admin')
@@ -112,7 +114,21 @@ export class AdminController {
  }
  @Get('settings') async settings(){const [s]=await rows('SELECT data FROM settings WHERE id=1');return s?.data||{};}
  @Put('settings') async settingsSave(@Req() req:any,@Body() b:D.StoreSettings){await tx(async db=>{await rows('INSERT INTO settings(id,data) VALUES(1,?) ON DUPLICATE KEY UPDATE data=VALUES(data)',[JSON.stringify(b)],db);await audit(db,req.user.id,'STORE_SETTINGS','1');});return {ok:true};}
- @Get('overview') async overview(){const [[users],[payments],[sales],[gold]]=await Promise.all([rows("SELECT COUNT(*) AS count FROM users WHERE role='USER'"),rows("SELECT COUNT(*) AS count FROM payments WHERE status='PENDING'"),rows("SELECT COUNT(*) AS count FROM sales WHERE status IN ('PENDING','APPROVED')"),rows('SELECT COALESCE(SUM(grams),0) AS total FROM accounts')]);return {customers:users.count,pendingPayments:payments.count,pendingSales:sales.count,goldGrams:display(gold.total,6)};}
+ @Get('overview') async overview(@Query('metal') selected?:string){
+  const metal=selected==='Silver'?'Silver':'Gold',balance=metal==='Silver'?'silverGrams':'grams',reserved=metal==='Silver'?'silverReserved':'reserved';
+  const [[users],[buys],[sales],[account],[rate]]=await Promise.all([
+   rows("SELECT COUNT(*) AS count FROM users WHERE role='USER'"),
+   rows("SELECT COUNT(*) AS count FROM gold_purchases p JOIN rates r ON r.id=p.rateId WHERE p.status='PENDING' AND r.metal=?",[metal]),
+   rows("SELECT COUNT(*) AS count FROM sales s JOIN rates r ON r.id=s.rateId WHERE s.status IN ('PENDING','APPROVED') AND r.metal=?",[metal]),
+   rows(`SELECT COALESCE(SUM(${balance}),0) AS total,COALESCE(SUM(${reserved}),0) AS reserved FROM accounts`),
+   rows('SELECT r.buyPaise FROM rate_publications p JOIN rates r ON r.id=p.rateId WHERE p.metal=?',[metal])
+  ]);
+  const [legacy]=await rows("SELECT COUNT(*) AS count FROM payments WHERE status='PENDING'");
+  return {metal,customers:users.count,pendingPurchases:Number(buys.count)+(metal==='Gold'?Number(legacy.count):0),pendingSales:sales.count,totalGrams:display(account.total,6),reservedGrams:display(account.reserved,6),currentValue:rate?display(BigInt(account.total)*BigInt(rate.buyPaise)/1000000n,2):'No rate published'};
+ }
+ @Get('displayrates') displayRates(){return rows('SELECT *,CAST(pricePaise/100 AS CHAR) AS price FROM display_rates ORDER BY updatedAt DESC,id');}
+ @Post('displayrates') retiredDisplayRate(){throw new GoneException('Use Current Store Rates to update the rate across Home and trading.');}
+ @Put('displayrates/:id') retiredDisplayRateUpdate(){throw new GoneException('Use Current Store Rates to update the rate across Home and trading.');}
  @Get('products') async products(){return (await prisma.product.findMany({include:{category:true}})).map(p=>product({...normalize(p),category:p.category.name}));}
  @Get('categories') async categories(){return normalize(await prisma.category.findMany({orderBy:[{metal:'asc'},{name:'asc'}]}));}
  @Post('categories') async category(@Req() req:any,@Body() b:D.Category){const ref=id();await tx(async db=>{await rows('INSERT INTO categories(id,name,metal,active) VALUES(?,?,?,?)',[ref,b.name,b.metal,b.active],db);await audit(db,req.user.id,'CATEGORY_CREATE',ref);});return {id:ref};}
@@ -121,44 +137,49 @@ export class AdminController {
  @Put('products/:id') updateProduct(@Req() req:any,@Param('id') ref:string,@Body() b:D.ProductDto){return this.saveProduct(req,ref,b,true);}
  async saveProduct(req:any,ref:string,b:D.ProductDto,update:boolean){
   const price=units(b.price,2);requireThat(!b.image||/^https?:\/\//.test(b.image),'Use an HTTP(S) image URL');
-  await tx(async db=>{const [c]=await rows('SELECT * FROM categories WHERE id=? FOR UPDATE',[b.categoryId],db);requireThat(c&&c.metal===b.metal,'Category must match product metal');requireThat(c.name!=='Coins'||(b.coinWeight&&[0.5,1,10,20,50].includes(Number(b.coinWeight))),'Select a supported coin weight: 0.5, 1, 10, 20 or 50 grams');if(update)requireThat((await rows('SELECT id FROM products WHERE id=?',[ref],db)).length,'Product not found');const vals=[b.name,b.metal,b.categoryId,price.toString(),b.weight,b.purity,b.image,b.description,b.coinWeight||null,b.stock,b.active];await rows(update?'UPDATE products SET name=?,metal=?,categoryId=?,pricePaise=?,weight=?,purity=?,image=?,description=?,coinWeight=?,stock=?,active=? WHERE id=?':'INSERT INTO products(name,metal,categoryId,pricePaise,weight,purity,image,description,coinWeight,stock,active,id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[...vals,ref],db);await audit(db,req.user.id,'PRODUCT_SAVE',ref);});return {id:ref};
+  await tx(async db=>{const [c]=await rows('SELECT * FROM categories WHERE id=? FOR UPDATE',[b.categoryId],db);requireThat(c&&c.metal===b.metal,'Category must match product metal');requireThat(c.name!=='Coins'||(b.coinWeight&&[0.5,1,10,20,50].includes(Number(b.coinWeight))),'Select a supported coin weight: 0.5, 1, 10, 20 or 50 grams');if(update)requireThat((await rows('SELECT id FROM products WHERE id=?',[ref],db)).length,'Product not found');const vals=[b.name,b.metal,b.categoryId,price.toString(),b.weight,b.purity,b.image,b.description,c.name==='Coins'?(b.coinWeight||null):null,b.stock,b.active];await rows(update?'UPDATE products SET name=?,metal=?,categoryId=?,pricePaise=?,weight=?,purity=?,image=?,description=?,coinWeight=?,stock=?,active=? WHERE id=?':'INSERT INTO products(name,metal,categoryId,pricePaise,weight,purity,image,description,coinWeight,stock,active,id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[...vals,ref],db);await rows('UPDATE products SET productCode=?,brand=?,colour=?,availability=?,certifiedBy=?,featured=? WHERE id=?',[b.productCode||'',b.brand||'',b.colour||'',b.availability||'Contact store',b.certifiedBy||'',!!b.featured,ref],db);await audit(db,req.user.id,'PRODUCT_SAVE',ref);});return {id:ref};
  }
- @Post('rates') async rate(@Req() req:any,@Body() b:D.Rate){const buy=units(b.buy,2),sell=units(b.sell,2);requireThat(sell<=buy,'Sell rate cannot exceed buy rate');const ref=id();await tx(async db=>{await rows('INSERT INTO rates(id,metal,buyPaise,sellPaise,source) VALUES(?,?,?,?,?)',[ref,b.metal,buy.toString(),sell.toString(),b.source],db);await audit(db,req.user.id,'RATE_PUBLISH',ref);});return {id:ref};}
- @Get('plans') async plans(){return normalize(await prisma.plan.findMany());}
- @Post('plans') createPlan(@Req() req:any,@Body() b:D.Plan){return this.savePlan(req,id(),b,false);}
- @Put('plans/:id') updatePlan(@Req() req:any,@Param('id') ref:string,@Body() b:D.Plan){return this.savePlan(req,ref,b,true);}
- async savePlan(req:any,ref:string,b:D.Plan,update:boolean){const amount=units(b.minimum,2);await tx(async db=>{if(update){const [p]=await rows('SELECT * FROM plans WHERE id=? FOR UPDATE',[ref],db);requireThat(p,'Plan not found');requireThat(p.months===b.months,'Frequency cannot change; create a new plan');}await rows(update?'UPDATE plans SET name=?,months=?,minPaise=?,active=? WHERE id=?':'INSERT INTO plans(name,months,minPaise,active,id) VALUES(?,?,?,?,?)',[b.name,b.months,amount.toString(),b.active,ref],db);await audit(db,req.user.id,'PLAN_SAVE',ref);});return {id:ref};}
+ @Post('rates') async rate(@Req() req:any,@Body() b:D.Rate){
+  const amount=units(b.buy,2);requireThat(amount>0n,'Enter a positive current rate per gram');const ref=id();
+  await tx(async db=>{
+   await rows('INSERT INTO rates(id,metal,buyPaise,sellPaise,source) VALUES(?,?,?,?,?)',[ref,b.metal,amount.toString(),amount.toString(),b.source],db);
+   await rows('INSERT INTO rate_publications(metal,rateId) VALUES(?,?) ON DUPLICATE KEY UPDATE rateId=VALUES(rateId)',[b.metal,ref],db);
+   await audit(db,req.user.id,'STORE_RATE_PUBLISH',ref);
+  });return {id:ref};
+ }
  @Get('users') users(){return rows("SELECT id,name,email,phone,role,active,createdAt FROM users WHERE role='USER' ORDER BY createdAt DESC");}
  @Get('kyc') kyc(){return rows('SELECT k.*,u.name,u.email FROM kyc k JOIN users u ON u.id=k.userId ORDER BY consentAt DESC');}
  @Get('subscriptions') subscriptions(){return rows('SELECT s.*,u.name,p.name AS planName FROM subscriptions s JOIN users u ON u.id=s.userId JOIN plans p ON p.id=s.planId ORDER BY anchorAt DESC');}
  @Get('payments') payments(){return rows('SELECT p.*,u.name FROM payments p JOIN users u ON u.id=p.userId ORDER BY p.createdAt DESC');}
- @Get('sales') sales(){return rows('SELECT s.*,u.name FROM sales s JOIN users u ON u.id=s.userId ORDER BY s.createdAt DESC');}
+ @Get('sales') sales(){return rows('SELECT s.*,r.metal,u.name FROM sales s JOIN rates r ON r.id=s.rateId JOIN users u ON u.id=s.userId ORDER BY s.createdAt DESC');}
  @Get('ledger') ledger(){return rows('SELECT l.*,u.name FROM ledger l JOIN users u ON u.id=l.userId ORDER BY l.createdAt DESC');}
- @Get('enquiries') enquiries(){return rows('SELECT e.*,u.name FROM enquiries e JOIN users u ON u.id=e.userId ORDER BY e.createdAt DESC');}
- @Get('audit') audits(){return rows('SELECT * FROM audit ORDER BY createdAt DESC LIMIT 500');}
+ @Get('enquiries') enquiries(){return rows('SELECT e.*,u.name,p.name AS productName,p.productCode FROM enquiries e JOIN users u ON u.id=e.userId LEFT JOIN products p ON p.id=e.productId ORDER BY e.createdAt DESC');}
+ @Get('audit') audits(){return rows('SELECT a.*,u.name AS actorName FROM audit a LEFT JOIN users u ON u.id=a.actor ORDER BY a.createdAt DESC LIMIT 500');}
  @Post('payments/:id/decision') async paymentDecision(@Req() req:any,@Param('id') ref:string,@Body() b:D.Decision){
   requireThat(b.note.trim().length>=3,'Enter a verification note');
   requireThat(b.action!=='PAID','Choose approve or reject');
   return tx(async db=>{const [p]=await rows('SELECT * FROM payments WHERE id=? FOR UPDATE',[ref],db);requireThat(p,'Payment not found');const target=b.action==='APPROVE'?'APPROVED':'REJECTED';if(p.status===target)return {ok:true};requireThat(p.status==='PENDING','Payment already finalized');
    if(b.action==='APPROVE'){
-    requireThat(b.reference&&b.reference.trim().length>=3,'Record the actual gold allocation reference');await verified(p.userId,db);
-    const [s]=await rows('SELECT s.*,pl.months FROM subscriptions s JOIN plans pl ON pl.id=s.planId WHERE s.id=? FOR UPDATE',[p.subscriptionId],db);const count=s.paidCount+1;
-    await rows('SELECT userId FROM accounts WHERE userId=? FOR UPDATE',[p.userId],db);
+    requireThat(b.reference&&b.reference.trim().length>=3,'Record the actual gold allocation reference');await rows("INSERT INTO trade_references(kind,value,recordId) VALUES('ALLOCATION',?,?)",[b.reference!.trim(),p.id],db);await verified(p.userId,db);
+    const [s]=await rows('SELECT s.*,pl.months FROM subscriptions s JOIN plans pl ON pl.id=s.planId WHERE s.id=? FOR UPDATE',[p.subscriptionId],db);const count=Number(s.paidCount)+1;
+    const [account]=await rows('SELECT userId FROM accounts WHERE userId=? FOR UPDATE',[p.userId],db);requireThat(account,'Customer gold account not found');
     await rows('UPDATE accounts SET grams=grams+? WHERE userId=?',[p.grams,p.userId],db);
     await rows('INSERT INTO ledger(id,userId,kind,referenceId,grams,amountPaise) VALUES(?,?,\'BUY\',?,?,?)',[id(),p.userId,p.id,p.grams,p.amountPaise],db);
     await rows('UPDATE subscriptions SET paidCount=?,nextDue=? WHERE id=?',[count,nextDue(s.anchorAt,count,s.months),s.id],db);
    }
-   await rows('UPDATE payments SET status=?,allocationRef=?,note=? WHERE id=?',[target,b.action==='APPROVE'?b.reference:null,b.note,p.id],db);await audit(db,req.user.id,'PAYMENT_'+target,ref);return {ok:true};});
+   await rows('UPDATE payments SET status=?,allocationRef=?,note=? WHERE id=?',[target,b.action==='APPROVE'?b.reference!.trim():null,b.note,p.id],db);await audit(db,req.user.id,'PAYMENT_'+target,ref);return {ok:true};});
  }
  @Post('sales/:id/decision') async saleDecision(@Req() req:any,@Param('id') ref:string,@Body() b:D.Decision){
-  return tx(async db=>{const [s]=await rows('SELECT * FROM sales WHERE id=? FOR UPDATE',[ref],db);requireThat(s,'Sale not found');const target=b.action==='APPROVE'?'APPROVED':b.action==='REJECT'?'REJECTED':'PAID';if(s.status===target)return {ok:true};
+  requireThat(b.note.trim().length>=3,'Enter the verification/rejection reason');
+  return tx(async db=>{const [s]=await rows('SELECT s.*,r.metal FROM sales s JOIN rates r ON r.id=s.rateId WHERE s.id=? FOR UPDATE',[ref],db);requireThat(s,'Sale not found');const target=b.action==='APPROVE'?'APPROVED':b.action==='REJECT'?'REJECTED':'PAID';if(s.status===target)return {ok:true};
    requireThat(target==='PAID'?s.status==='APPROVED':s.status==='PENDING','Invalid sale status transition');
-   const [a]=await rows('SELECT * FROM accounts WHERE userId=? FOR UPDATE',[s.userId],db);requireThat(a&&BigInt(a.reserved)>=BigInt(s.grams),'Reservation missing');
-   if(target==='REJECTED')await rows('UPDATE accounts SET reserved=reserved-? WHERE userId=?',[s.grams,s.userId],db);
+   const balance=s.metal==='Silver'?'silverGrams':'grams',reserved=s.metal==='Silver'?'silverReserved':'reserved';
+   const [a]=await rows('SELECT * FROM accounts WHERE userId=? FOR UPDATE',[s.userId],db);requireThat(a&&BigInt(a[reserved])>=BigInt(s.grams),'Reservation missing');
+   if(target==='REJECTED')await rows(`UPDATE accounts SET ${reserved}=${reserved}-? WHERE userId=?`,[s.grams,s.userId],db);
    if(target==='PAID'){
-    requireThat(b.reference&&b.reference.trim().length>=3,'Enter verified bank payout reference');requireThat(BigInt(a.grams)>=BigInt(s.grams),'Insufficient account gold');
-    await rows('UPDATE accounts SET grams=grams-?,reserved=reserved-? WHERE userId=?',[s.grams,s.grams,s.userId],db);
-    await rows("INSERT INTO ledger(id,userId,kind,referenceId,grams,amountPaise) VALUES(?,?,'SELL',?,?,?)",[id(),s.userId,s.id,(-BigInt(s.grams)).toString(),s.amountPaise],db);
+    requireThat(b.reference&&b.reference.trim().length>=3,'Enter verified bank payout reference');requireThat(BigInt(a[balance])>=BigInt(s.grams),'Insufficient account gold');
+    await rows(`UPDATE accounts SET ${balance}=${balance}-?,${reserved}=${reserved}-? WHERE userId=?`,[s.grams,s.grams,s.userId],db);
+    await rows("INSERT INTO ledger(id,userId,kind,referenceId,grams,amountPaise,metal) VALUES(?,?,'SELL',?,?,?,?)",[id(),s.userId,s.id,(-BigInt(s.grams)).toString(),s.amountPaise,s.metal],db);
    }
    await rows('UPDATE sales SET status=?,payoutReference=?,note=? WHERE id=?',[target,target==='PAID'?b.reference:null,b.note,ref],db);await audit(db,req.user.id,'SALE_'+target,ref);return {ok:true};});
  }

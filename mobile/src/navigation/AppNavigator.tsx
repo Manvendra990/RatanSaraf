@@ -56,7 +56,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Cart" component={CartScreen} options={{ title: 'My Cart' }} />
         <Stack.Screen name="Wishlist" component={WishlistScreen} options={{ title: 'Wishlist' }} />
         <Stack.Screen name="ManualKyc" component={ManualKycScreen} options={{ title: 'Personal Details' }} />
-        <Stack.Screen name="Sip" component={SipScreen} options={{ title: 'Gold SIP Yojana' }} />
+        <Stack.Screen name="Sip" component={SipScreen} options={{ title: 'Gold & Silver' }} />
         <Stack.Screen name="Coins" component={CoinsScreen} options={{ title: 'Coins' }} />
         <Stack.Screen name="Menu" component={MenuScreen} options={{ headerShown: false, presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'My Profile' }} />

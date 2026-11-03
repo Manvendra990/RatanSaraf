@@ -1,3 +1,5 @@
+Current 1 November 2026 installation/update instructions are in START_HERE.md. Historical plans are no longer created or sold.
+
 # Prisma + MySQL setup
 
 Prisma 6.19.0 is now the backend database layer. It is pinned together with @prisma/client for reproducible installation. The mobile/admin API shape and existing UI are unchanged.

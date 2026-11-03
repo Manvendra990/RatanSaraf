@@ -9,7 +9,7 @@ export const colors = {
   maroonLight: '#6E1822',
   gold: '#C9971C',
   goldBright: '#E6B422',
-  goldLight: '#F1D98A',
+  goldLight: '#ffd900',
 
   // Surfaces
   bg: '#FBF6EC',
