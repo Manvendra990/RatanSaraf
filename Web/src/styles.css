@@ -92,3 +92,72 @@
     contrast(1.08)
     saturate(1.12);
 }
+
+/* ==========================================================
+   Ratan Lal Saraf — Hero image slider additions ONLY
+   Append this block at the very END of src/styles.css.
+   Keeps the original hero, backdrop, shape, and tag in place.
+   ========================================================== */
+
+/* Overlay all jewellery images in exactly the same hero frame. */
+.hero-visual > img.hero-slide-image {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  margin: 0;
+  width: calc(100%);
+  height: calc(100%);
+  object-fit: cover;
+  object-position: center center;
+  border-radius: 44% 44% 0 0;
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 900ms ease-in-out;
+}
+
+.hero-visual > img.hero-slide-image.is-active {
+  opacity: 1;
+}
+
+/* Keep the existing 'Jewellery for every celebration' tag above slides. */
+.hero-visual .hero-visual-tag {
+  z-index: 2;
+}
+
+/* Match the exact image placement of the existing mobile hero CSS. */
+@media (max-width: 700px) {
+  .hero-visual > img.hero-slide-image {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    width: min(325px, 80%);
+    height: 260px;
+    object-position: center 46%;
+    border-radius: 0 0 45% 45%;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-visual > img.hero-slide-image {
+    transition: none;
+  }
+}
+
+
+
+.coins-banner-art {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.coins-banner-image {
+  width: 100%;
+  /* max-width: 220px; */
+  border-radius: 20px;
+  height: auto;
+  object-fit: contain;
+}

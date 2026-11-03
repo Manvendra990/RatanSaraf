@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import GoldNeck from "../../public/gold_neck.jpg"
 import {
   ArrowRight,
   ArrowUpRight,
@@ -28,6 +27,16 @@ import {
   SectionHeading,
 } from '../components/UI';
 
+import img1 from "../../public/img1.jpeg"
+
+// Images stored in Vite public/ are used as URL paths, not JS imports.
+// Add, remove, or reorder images here. Only list files that exist in public/.
+const heroImages = [
+  { src: '/img1.jpeg', alt: 'Ratan Lal Saraf jewellery collection one' },
+  { src: '/img2.jpeg', alt: 'Ratan Lal Saraf jewellery collection two' },
+  { src: '/img3.jpeg', alt: 'Ratan Lal Saraf jewellery collection three' },
+];
+
 export default function Home() {
   const {
     products,
@@ -39,6 +48,19 @@ export default function Home() {
   } = useStore();
 
   const [metal, setMetal] = useState('Gold');
+
+  const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
+
+  // Change the hero jewellery image every five seconds.
+  useEffect(() => {
+    if (heroImages.length <= 1) return undefined;
+
+    const interval = window.setInterval(() => {
+      setCurrentHeroIndex((index) => (index + 1) % heroImages.length);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   // Automatically switch between Gold and Silver rates
   useEffect(() => {
@@ -112,12 +134,19 @@ export default function Home() {
           </div>
 
           <div className="hero-visual">
-            <div className="hero-image-backdrop" />
+            {/* <div className="hero-image-backdrop" /> */}
 
-            <img
-              src="/hero-jewellery.svg"
-              alt="Illustration of a traditional gold necklace with a ruby pendant"
-            />
+            {/* Keep all slides in the same position for a smooth crossfade. */}
+            {heroImages.map((image, index) => (
+              <img
+                key={image.src}
+                src={image.src}
+                alt={image.alt}
+                className={`hero-slide-image ${index === currentHeroIndex ? 'is-active' : ''}`}
+                aria-hidden={index !== currentHeroIndex}
+                fetchPriority={index === 0 ? 'high' : 'auto'}
+              />
+            ))}
 
             <div className="hero-visual-tag">
               <span className="tag-star">✧</span>
@@ -195,7 +224,7 @@ export default function Home() {
             <div className="category-art">
               <div className="category-jewellery-image">
                 <img
-                  src={GoldNeck}
+                  src="/img2.jpeg"
                   alt="Ratan Lal Saraf Gold Jewellery Collection"
                   loading="lazy"
                 />
@@ -222,10 +251,12 @@ export default function Home() {
             className="category-tile category-silver"
           >
             <div className="category-art">
-              <div className="ornament ornament-ring">
-                <span />
-                <i />
-                <b />
+              <div className="category-jewellery-image">
+                <img
+                  src="/img3.jpeg"
+                  alt="Ratan Lal Saraf Gold Jewellery Collection"
+                  loading="lazy"
+                />
               </div>
             </div>
 
@@ -249,10 +280,12 @@ export default function Home() {
             className="category-tile category-coins"
           >
             <div className="category-art">
-              <div className="ornament ornament-coins">
-                <span />
-                <i />
-                <b />
+              <div className="category-jewellery-image">
+                <img
+                  src="/img1.jpeg"
+                  alt="Ratan Lal Saraf Gold Jewellery Collection"
+                  loading="lazy"
+                />
               </div>
             </div>
 
@@ -419,7 +452,7 @@ export default function Home() {
 
       <section className="coins-banner">
         <div className="container coins-banner-inner">
-          <div className="coins-banner-art">
+          {/* <div className="coins-banner-art">
             <span>✦</span>
 
             <div className="gold-coin-drawing">
@@ -429,6 +462,13 @@ export default function Home() {
             <div className="silver-coin-drawing">
               R
             </div>
+          </div> */}
+          <div className="coins-banner-art">
+            <img
+              src={img1}
+              alt="Gold and silver coins"
+              className="coins-banner-image"
+            />
           </div>
 
           <div className="coins-banner-copy">
