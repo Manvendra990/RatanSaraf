@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
 import { useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
+import {GenderFilter} from '../../components/ui/GenderFilter';
+import type {Gender} from '../../types';
 import { Empty, Field, Grid, Heading, ProductCard, Screen } from '../../components/ui';
 import { useCatalog } from '../../context/CatalogContext';
 import { useRootNavigation } from '../../hooks/useRootNavigation';
@@ -12,6 +14,8 @@ export function ListingScreen() {
   const navigation = useRootNavigation();
   const route = useRoute<RouteProp<RootStack, 'Listing'>>();
   const [search, setSearch] = useState('');
+  const [gender,setGender]=useState<Gender|'All'>(route.params?.gender||'All');
+  useEffect(()=>setGender(route.params?.gender||'All'),[route.params?.gender]);
 
   const metal = route.params?.metal;
   const category = route.params?.category;
@@ -20,6 +24,7 @@ export function ListingScreen() {
     p =>
       p.category !== 'Coins' &&
       (!metal || p.metal === metal) &&
+      (gender==='All'||p.gender===gender) &&
       (!category || p.category === category) &&
       `${p.name} ${p.productCode || ''}`.toLowerCase().includes(search.toLowerCase()),
   );
@@ -30,6 +35,7 @@ export function ListingScreen() {
     <Screen>
       <Heading>{title}</Heading>
       <Field placeholder="Search jewellery..." value={search} onChangeText={setSearch} />
+      <GenderFilter value={gender} onChange={setGender}/>
       <Grid>
         {result.map(p => (
           <ProductCard key={p.id} product={p} onPress={() => navigation.navigate('Product', { id: p.id })} />

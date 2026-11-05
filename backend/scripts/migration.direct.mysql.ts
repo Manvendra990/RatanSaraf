@@ -26,6 +26,10 @@ async function main(){
   await db.execute("INSERT INTO payments(id,userId,subscriptionId,reference,rateId,amountPaise,grams,status,allocationRef) VALUES(?,?,?,'LEGACY-BANK',?,2000000,2000000,'APPROVED','LEGACY-ALLOC')",[payment,user,subscription,rate]);
   await db.execute("INSERT INTO ledger(id,userId,kind,referenceId,grams,amountPaise) VALUES(?,?,'BUY',?,2000000,2000000)",[ledger,user,payment]);
   await db.execute("INSERT INTO banners(id,title,subtitle,image,buttonLabel,target,sortOrder,active) VALUES(?,'Archived banner','','','View','Sip',0,1)",[randomUUID()]);
+  const category=randomUUID(),product=randomUUID(),sale=randomUUID();
+  await db.execute("INSERT INTO categories(id,name,metal,active) VALUES(?,'Legacy rings','Gold',1)",[category]);
+  await db.execute("INSERT INTO products(id,name,metal,categoryId,pricePaise,weight,purity,description) VALUES(?,'Legacy ring','Gold',?,10000,'1 g','22K','Prior catalogue record')",[product,category]);
+  await db.execute("INSERT INTO sales(id,userId,rateId,grams,amountPaise,payoutDetails,status) VALUES(?,?,?,100000,90000,'Legacy bank details','REJECTED')",[sale,user,rate]);
   deploy([]);deploy([]); // Repeated deploy must be a no-op.
   const [account]=await db.execute<any[]>('SELECT grams,reserved,silverGrams,silverReserved FROM accounts WHERE userId=?',[user]);assert.equal(String(account[0].grams),'2000000');assert.equal(String(account[0].reserved),'0');assert.equal(String(account[0].silverGrams),'0');assert.equal(String(account[0].silverReserved),'0');
   const [metals]=await db.query<any[]>('SELECT metal FROM ledger');assert.equal(metals[0].metal,'Gold');
@@ -34,6 +38,9 @@ async function main(){
   await assert.rejects(db.execute("INSERT INTO trade_references(kind,value,recordId) VALUES('PAYMENT','LEGACY-BANK',?)",[randomUUID()]));
   const [publication]=await db.query<any[]>('SELECT rateId FROM rate_publications');assert.equal(publication.length,1);assert.equal(publication[0].rateId,rate);
   const [buys]=await db.query<any[]>('SELECT COUNT(*) AS n FROM gold_purchases');assert.equal(Number(buys[0].n),0);
+  const [oldProduct]=await db.query<any[]>('SELECT gender FROM products WHERE id=?',[product]);assert.equal(oldProduct[0].gender,null);
+  const [oldSale]=await db.query<any[]>('SELECT bankName,accountEncrypted,payoutDetails FROM sales WHERE id=?',[sale]);assert.equal(oldSale[0].bankName,null);assert.equal(oldSale[0].accountEncrypted,null);assert.equal(oldSale[0].payoutDetails,'Legacy bank details');
+  const [notifications]=await db.query<any[]>('SELECT COUNT(*) AS n FROM rate_notifications');assert.equal(Number(notifications[0].n),0);
   console.log('PASS: forward Prisma migrations on real MySQL preserve historical SIP/user/account/ledger/banner rows, protect prior references, and deploy twice safely.');
  }finally{await db.end();rmSync(temp,{recursive:true,force:true});}
 }

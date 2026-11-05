@@ -3,6 +3,7 @@ export class Login { @IsString() @Length(3,190) login!: string; @IsString() @Len
 export class Register extends Login { @IsString() @Length(2,120) name!: string; @IsEmail() @MaxLength(190) email!: string; @Matches(/^\+?[0-9]{10,15}$/) phone!: string; }
 export class Category { @IsString() @Length(1,100) name!: string; @IsIn(['Gold','Silver']) metal!: string; @IsBoolean() active!: boolean; }
 export class ProductDto {
+ @IsOptional() @IsIn(['Men','Women','Unisex','Children']) gender?:string;
  @IsOptional() @IsString() @MaxLength(80) productCode?:string;
  @IsOptional() @IsString() @MaxLength(120) brand?:string;
  @IsOptional() @IsString() @MaxLength(80) colour?:string;
@@ -11,13 +12,26 @@ export class ProductDto {
  @IsOptional() @IsBoolean() featured?:boolean;
  @IsString() @Length(1,160) name!: string; @IsIn(['Gold','Silver']) metal!: string; @IsUUID() categoryId!: string; @Matches(/^\d+(\.\d{1,2})?$/) price!: string; @IsString() @Length(1,60) weight!: string; @IsString() @Length(1,60) purity!: string; @IsString() @MaxLength(2000) image!: string; @IsString() @MaxLength(10000) description!: string; @IsOptional() @Matches(/^\d+(\.\d{1,3})?$/) coinWeight?: string; @IsInt() @Min(0) @Max(1000000) stock!: number; @IsBoolean() active!: boolean; }
 export class Rate { @IsIn(['Gold','Silver']) metal!: string; @Matches(/^\d+(\.\d{1,2})?$/) buy!: string; @IsOptional() @Matches(/^\d+(\.\d{1,2})?$/) sell?: string; @IsString() @Length(2,120) source!: string; }
-export class Sale { @IsUUID() rateId!: string; @Matches(/^\d+(\.\d{1,6})?$/) grams!: string; @IsString() @Length(5,500) payoutDetails!: string; }
+export class LegacySale { @IsUUID() rateId!: string; @Matches(/^\d+(\.\d{1,6})?$/) grams!: string; @IsString() @Length(5,500) payoutDetails!: string; }
+export class Sale {
+ @IsUUID() rateId!:string;
+ @Matches(/^\d+(\.\d{1,6})?$/) grams!:string;
+ @IsString() @Length(2,120) bankName!:string;
+ @IsString() @Length(2,120) accountHolderName!:string;
+ @Matches(/^[0-9]{9,18}$/) accountNumber!:string;
+ @Matches(/^[0-9]{9,18}$/) confirmAccountNumber!:string;
+ @Matches(/^[A-Z]{4}0[A-Z0-9]{6}$/) ifsc!:string;
+}
 export class Decision { @IsIn(['APPROVE','REJECT','PAID']) action!: string; @IsOptional() @IsString() @Length(3,190) reference?: string; @IsString() @Length(3,500) note!: string; }
 export class KycConsent { @IsIn([true]) consent!: boolean; }
 export class KycResult { @IsUUID() reference!: string; @IsString() @Length(1,190) providerRef!: string; @IsIn(['VERIFIED','REJECTED']) status!: string; }
 export class Enquiry { @IsString() @Length(1,60) productId!: string; @IsString() @Length(1,1000) message!: string; }
 
 export class StoreSettings {
+ @IsOptional() @IsString() @MaxLength(500) facebook?:string;
+ @IsOptional() @IsString() @MaxLength(500) instagram?:string;
+ @IsOptional() @IsString() @MaxLength(500) youtube?:string;
+ @IsOptional() @IsString() @MaxLength(1000) googleMaps?:string;
  @IsString() @Length(2,120) name!:string;
  @IsString() @Length(1,120) ownerName!:string;
  @IsString() @MaxLength(200) tagline!:string;

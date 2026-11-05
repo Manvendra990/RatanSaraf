@@ -1,0 +1,141 @@
+
+
+/* Ratan Lal Saraf — compact, collapsible product filters only. */
+.ad-shell .ad-product-filters {
+  margin: 0 20px 12px;
+  padding: 8px 10px;
+  background: #fffdfc;
+  border: 1px solid #eee2e7;
+  border-radius: 9px;
+}
+.ad-shell .ad-product-filter-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 36px;
+}
+.ad-shell .ad-product-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 35px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid #dfcbd2;
+  background: #fff5f6;
+  color: #67263a;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.ad-shell .ad-product-filter-toggle.is-open { background: #f5e8eb; }
+.ad-shell .ad-product-filter-toggle svg:last-child { transition: transform .2s ease; }
+.ad-shell .ad-product-filter-toggle.is-open svg:last-child { transform: rotate(180deg); }
+.ad-shell .ad-product-filter-badge {
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #67263a;
+  color: #fff;
+  font-size: 10px;
+}
+.ad-shell .ad-product-quick-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 650;
+  color: #826974;
+}
+.ad-shell .ad-product-quick-sort select {
+  width: 148px;
+  max-width: 100%;
+  height: 35px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid #e8dde2;
+  background: #fff;
+  color: #46313b;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ad-shell .ad-product-filter-count {
+  margin-left: auto;
+  color: #80727a;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ad-shell .ad-product-clear {
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: #873950;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ad-shell .ad-product-clear:hover { background: #fff0f3; }
+.ad-shell .ad-product-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  border-top: 1px solid #f1e9ed;
+  margin-top: 9px;
+  padding-top: 11px;
+}
+.ad-shell .ad-product-filters-grid label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 5px;
+}
+.ad-shell .ad-product-filters-grid label > span {
+  color: #786671;
+  font-size: 10px;
+  font-weight: 700;
+}
+.ad-shell .ad-product-filters-grid select {
+  width: 100%;
+  min-width: 0;
+  height: 35px;
+  padding: 0 7px;
+  border: 1px solid #e8dde2;
+  border-radius: 7px;
+  background: #fff;
+  color: #46313b;
+  font-size: 11px;
+}
+.ad-shell .ad-product-filter-toggle:focus-visible,
+.ad-shell .ad-product-quick-sort select:focus-visible,
+.ad-shell .ad-product-clear:focus-visible,
+.ad-shell .ad-product-filters-grid select:focus-visible {
+  outline: 2px solid #a76b7d;
+  outline-offset: 2px;
+}
+@media (max-width: 1220px) {
+  .ad-shell .ad-product-filters-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .ad-shell .ad-product-filters { margin: 0 12px 10px; padding: 7px 9px; }
+  .ad-shell .ad-product-filters-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .ad-shell .ad-product-filter-toolbar { gap: 6px; }
+  .ad-shell .ad-product-quick-sort span { display: none; }
+  .ad-shell .ad-product-quick-sort select { width: 125px; }
+  .ad-shell .ad-product-filter-count { display: none; } /* Already shown in Products heading */
+}
+@media (max-width: 385px) {
+  .ad-shell .ad-product-filter-toggle { padding: 0 9px; gap: 5px; }
+  .ad-shell .ad-product-quick-sort select { width: 114px; }
+  .ad-shell .ad-product-clear { padding: 0 4px; }
+}

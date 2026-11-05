@@ -48,6 +48,7 @@ enum LedgerKind {
 }
 
 model User {
+  notificationReads NotificationRead[]
   id            String         @id @db.VarChar(36)
   name          String         @db.VarChar(120)
   email         String         @unique(map: "email") @db.VarChar(190)
@@ -92,6 +93,7 @@ model Category {
 }
 
 model Product {
+  gender ProductGender?
   id          String   @id @db.VarChar(60)
   productCode String @default("") @db.VarChar(80)
   brand String @default("") @db.VarChar(120)
@@ -126,6 +128,7 @@ model Shop {
 }
 
 model Rate {
+  notification RateNotification?
   publication RatePublication?
   id        String    @id @db.VarChar(36)
   metal     Metal
@@ -218,6 +221,11 @@ model Payment {
 }
 
 model Sale {
+  bankName String? @db.VarChar(120)
+  accountHolderName String? @db.VarChar(120)
+  accountLast4 String? @db.VarChar(4)
+  accountEncrypted String? @db.Text
+  ifsc String? @db.VarChar(11)
   id              String      @id @db.VarChar(36)
   userId          String      @db.VarChar(36)
   rateId          String      @db.VarChar(36)
@@ -361,4 +369,30 @@ model RatePublication {
  rateId String @unique @db.VarChar(36)
  rate Rate @relation(fields:[rateId],references:[id],onDelete:NoAction,onUpdate:NoAction,map:"rate_publication_rate_fk")
  @@map("rate_publications")
+}
+
+enum ProductGender {
+ Men
+ Women
+ Unisex
+ Children
+}
+model RateNotification {
+ id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+ rateId String @unique @db.VarChar(36)
+ metal Metal
+ amountPaise BigInt @db.UnsignedBigInt
+ createdAt DateTime @default(now()) @db.DateTime(3)
+ rate Rate @relation(fields:[rateId],references:[id],onDelete:NoAction,onUpdate:NoAction,map:"notification_rate_fk")
+ reads NotificationRead[]
+ @@map("rate_notifications")
+}
+model NotificationRead {
+ userId String @db.VarChar(36)
+ notificationId BigInt @db.UnsignedBigInt
+ readAt DateTime @default(now()) @db.DateTime(3)
+ user User @relation(fields:[userId],references:[id],onDelete:NoAction,onUpdate:NoAction,map:"notification_read_user_fk")
+ notification RateNotification @relation(fields:[notificationId],references:[id],onDelete:NoAction,onUpdate:NoAction,map:"notification_read_event_fk")
+ @@id([userId,notificationId])
+ @@map("notification_reads")
 }

@@ -1,0 +1,7 @@
+import React from 'react';
+import Svg,{Path,Circle,Rect} from 'react-native-svg';
+export type IconName='heart'|'cart'|'bell'|'user'|'phone'|'whatsapp'|'facebook'|'instagram'|'youtube'|'map'|'close'|'contact';
+export function AppIcon({name,color='currentColor',size=24}:{name:IconName;color?:string;size?:number}){
+ const paths:Partial<Record<IconName,string>>={heart:'M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z',cart:'M2 3h3l3 13h11l3-10H6 M9 20h.01 M19 20h.01',bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4',phone:'M7 3H4c-3 8 8 19 16 16v-3l-5-2-2 2a13 13 0 0 1-5-5l2-2-3-6Z',facebook:'M14 21v-8h3l.5-4H14V7c0-1 .5-2 2-2h2V2h-3c-4 0-5 3-5 5v2H7v4h3v8',map:'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z',close:'m6 6 12 12 M18 6 6 18',contact:'M4 4h16v13H8l-4 4V4Z M8 8h8 M8 12h5',whatsapp:'M20.5 11.5a8.5 8.5 0 0 1-12.7 7.4L3 21l1.5-5A8.5 8.5 0 1 1 20.5 11.5Z M8 7c-1 4 2 7 6 8l2-2-3-1-1 1-2-2 1-1-1-3H8Z'};
+ return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">{name==='user'?<><Circle cx="12" cy="7" r="4"/><Path d="M4 22v-3a8 8 0 0 1 16 0v3"/></>:name==='instagram'?<><Rect x="3" y="3" width="18" height="18" rx="5"/><Circle cx="12" cy="12" r="4"/><Circle cx="17.5" cy="6.5" r=".7" fill={color}/></>:name==='youtube'?<><Rect x="2" y="5" width="20" height="14" rx="4"/><Path d="m10 9 5 3-5 3V9Z" fill={color}/></>:<Path d={paths[name]}/ >}{name==='map'&&<Circle cx="12" cy="10" r="2.5"/>}</Svg>;
+}

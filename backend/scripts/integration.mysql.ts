@@ -16,7 +16,8 @@ async function main(){
   await run("INSERT INTO users(id,name,email,phone,password,role) VALUES(?,?,?,?,?,'ADMIN')",[admin,'Test Admin',`${suffix}@admin.test`,suffix.slice(0,15),await bcrypt.hash(password,4)]);
   child=spawn(process.execPath,['dist/main.js'],{env:{...process.env,DATABASE_URL:url,PORT:String(port),JWT_SECRET:randomBytes(32).toString('hex'),ADMIN_ORIGIN:origin,NODE_ENV:'test',PAYMENTS_ENABLED:'false',KYC_API_URL:'',KYC_API_KEY:'',KYC_WEBHOOK_SECRET:'',KYC_ENCRYPTION_KEY:randomBytes(32).toString('hex')},stdio:'ignore'});
   for(let i=0;i<80;i++){try{if((await fetch(base+'/health')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
-  async function request(path:string,body?:any,token?:string,cookie?:string){const r=await fetch(base+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Origin:origin,...(token?{Authorization:`Bearer ${token}`} :{}),...(cookie?{Cookie:cookie}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json(),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
+  async function request(path:string,body?:any,token?:string,cookie?:string,method?:string){const r=await fetch(base+path,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json',Origin:origin,...(token?{Authorization:`Bearer ${token}`} :{}),...(cookie?{Cookie:cookie}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json(),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
+  const bank={bankName:'TEST BANK',accountHolderName:'Test Customer',accountNumber:'001234567890',confirmAccountNumber:'001234567890',ifsc:'SBIN0001234'};
   const a=await request('/auth/admin-login',{login:`${suffix}@admin.test`,password});assert.equal(a.status,201);const cookie=a.cookie!;
   const u=await request('/auth/register',{name:'Gold Test Customer',login:`${suffix}@user.test`,email:`${suffix}@user.test`,phone:'9'+Date.now().toString().slice(-9),password});assert.equal(u.status,201);const token=u.data.token;const userId=u.data.user.id;
   // Real-provider KYC remains unavailable. Use the manual submission/review endpoints with test data.
@@ -56,13 +57,24 @@ async function main(){
   assert.equal((await request(`/admin/purchases/${another.data.id}/decision`,rejected,undefined,cookie)).status,201);
   assert.equal((await request(`/admin/purchases/${another.data.id}/decision`,decision,undefined,cookie)).status,400);
   // Simultaneous sells cannot reserve the same available gold twice.
-  const sales=await Promise.all([request('/gold/sales',{rateId:newer.data.id,grams:'1.5',payoutDetails:'TEST ONLY'},token),request('/gold/sales',{rateId:newer.data.id,grams:'1.5',payoutDetails:'TEST ONLY'},token)]);assert.deepEqual(sales.map(r=>r.status).sort(),[201,400]);
+  const sales=await Promise.all([request('/gold/sales',{rateId:newer.data.id,grams:'1.5',...bank},token),request('/gold/sales',{rateId:newer.data.id,grams:'1.5',...bank},token)]);assert.deepEqual(sales.map(r=>r.status).sort(),[201,400]);
   const sale=sales.find(r=>r.status===201)!.data;
+  const beforeInvalid=(await request('/gold/dashboard',undefined,token)).data.reserved;
+  for(const invalid of [{...bank,confirmAccountNumber:'001234567899'},{...bank,ifsc:'INVALID'},{...bank,accountNumber:'123',confirmAccountNumber:'123'}])assert.equal((await request('/gold/sales',{rateId:newer.data.id,grams:'0.1',...invalid},token)).status,400);
+  assert.equal((await request('/gold/dashboard',undefined,token)).data.reserved,beforeInvalid);
+  const userSales=(await request('/gold/dashboard',undefined,token)).data.sales;const ownSale=userSales.find((x:any)=>x.id===sale.id);
+  assert.equal(ownSale.bankName,'TEST BANK');assert.equal(ownSale.accountLast4,'7890');assert.ok(!JSON.stringify(userSales).includes(bank.accountNumber));assert.equal(ownSale.accountEncrypted,undefined);
+  const adminSales=(await request('/admin/sales',undefined,undefined,cookie)).data;assert.ok(!JSON.stringify(adminSales).includes(bank.accountNumber));assert.ok(adminSales.every((x:any)=>!x.accountEncrypted));
+  assert.equal((await request(`/admin/sales/${sale.id}/bank`,undefined,token)).status,403);
+  const bankView=await request(`/admin/sales/${sale.id}/bank`,undefined,undefined,cookie);assert.equal(bankView.status,200);assert.equal(bankView.data.accountNumber,bank.accountNumber);assert.equal(bankView.data.ifsc,bank.ifsc);assert.equal(bankView.data.confirmAccountNumber,undefined);
+  const [storedBank]=await run('SELECT accountEncrypted FROM sales WHERE id=?',[sale.id]);assert.ok(storedBank.accountEncrypted&&!storedBank.accountEncrypted.includes(bank.accountNumber));
+  const [bankAudit]=await run("SELECT COUNT(*) AS n FROM audit WHERE action='SALE_BANK_VIEW' AND referenceId=?",[sale.id]);assert.equal(Number(bankAudit.n),1);
+
   assert.equal((await request(`/admin/sales/${sale.id}/decision`,{action:'APPROVE',note:'Test approval'},undefined,cookie)).status,201);
   d=await request('/gold/dashboard',undefined,token);assert.equal(d.data.balance,'2.000000');assert.equal(d.data.reserved,'1.500000');
   const paid={action:'PAID',reference:'PAYOUT-'+suffix,note:'Test payout confirmed'};await Promise.all([request(`/admin/sales/${sale.id}/decision`,paid,undefined,cookie),request(`/admin/sales/${sale.id}/decision`,paid,undefined,cookie)]);
   d=await request('/gold/dashboard',undefined,token);assert.equal(d.data.balance,'0.500000');assert.equal(d.data.reserved,'0.000000');assert.equal(d.data.ledger.length,2);
-  const toReject=await request('/gold/sales',{rateId:newer.data.id,grams:'0.25',payoutDetails:'TEST ONLY'},token);assert.equal(toReject.status,201);
+  const toReject=await request('/gold/sales',{rateId:newer.data.id,grams:'0.25',...bank},token);assert.equal(toReject.status,201);
   assert.equal((await request(`/admin/sales/${toReject.data.id}/decision`,{action:'REJECT',note:'Test rejected sale'},undefined,cookie)).status,201);
   d=await request('/gold/dashboard',undefined,token);assert.equal(d.data.balance,'0.500000');assert.equal(d.data.reserved,'0.000000');
   const inbox=await request('/admin/purchases',undefined,undefined,cookie);assert.equal(inbox.data.filter((p:any)=>p.userId===userId).length,2);
@@ -95,8 +107,8 @@ async function main(){
   const approvals=await Promise.all([request(`/admin/purchases/${silverBuy.data.id}/decision`,silverApproval,undefined,cookie),request(`/admin/purchases/${silverBuy.data.id}/decision`,silverApproval,undefined,cookie)]);assert.ok(approvals.every(r=>r.status===201));
   d=await request('/gold/dashboard',undefined,token);assert.equal(d.data.holdings.Silver.balance,'5.000000');assert.equal(d.data.balance,goldBefore);
   const silverNew=await request('/admin/rates',{metal:'Silver',buy:'220',sell:'210',source:'UPDATED SILVER DAILY TEST'},undefined,cookie);
-  assert.equal((await request('/gold/sales',{rateId:silverQuote.data.id,grams:'2',payoutDetails:'TEST ONLY'},token)).status,400);
-  const silverSale=await request('/gold/sales',{rateId:silverNew.data.id,grams:'2',payoutDetails:'TEST ONLY'},token);assert.equal(silverSale.status,201);assert.equal(silverSale.data.amount,'440.00');
+  assert.equal((await request('/gold/sales',{rateId:silverQuote.data.id,grams:'2',...bank},token)).status,400);
+  const silverSale=await request('/gold/sales',{rateId:silverNew.data.id,grams:'2',...bank},token);assert.equal(silverSale.status,201);assert.equal(silverSale.data.amount,'440.00');
   d=await request('/gold/dashboard',undefined,token);assert.equal(d.data.holdings.Silver.available,'3.000000');assert.equal(d.data.holdings.Silver.reserved,'2.000000');assert.equal(d.data.balance,goldBefore);
   await request(`/admin/sales/${silverSale.data.id}/decision`,{action:'APPROVE',note:'Silver sale verified'},undefined,cookie);
   const silverPaid={action:'PAID',note:'Silver payout completed',reference:'SILVER-PAYOUT-'+suffix};
@@ -113,6 +125,34 @@ async function main(){
   const retained=(await request('/gold/dashboard',undefined,token)).data.sales.find((r:any)=>r.id===silverSale.data.id);assert.equal(retained.amountPaise,'44000');
   const noCache=await fetch(base+'/gold/rates');assert.equal(noCache.headers.get('cache-control'),'no-store');
   assert.equal((await request('/gold/purchases',{rateId:older.data.id,grams:1,reference:'SUPERSEDED-'+suffix},token)).status,400);
+
+  // Gender survives create/update/catalogue; legacy unclassified products stay visible.
+  const category=await request('/admin/categories',{name:'Rings',metal:'Gold',active:true},undefined,cookie);assert.equal(category.status,201);
+  const productBase={name:'Gender Fixture Ring',metal:'Gold',categoryId:category.data.id,price:'100',weight:'1 g',purity:'22K',image:'',description:'Fixture',stock:1,active:true,featured:false};
+  const women=await request('/admin/products',{...productBase,gender:'Women'},undefined,cookie);assert.equal(women.status,201);
+  const children=await request('/admin/products',{...productBase,name:'Child Fixture Ring',gender:'Children'},undefined,cookie);assert.equal(children.status,201);
+  const legacyProduct=await request('/admin/products',{...productBase,name:'Unclassified fixture'},undefined,cookie);assert.equal(legacyProduct.status,201);
+  assert.equal((await request('/admin/products',{...productBase,gender:'BAD'},undefined,cookie)).status,400);
+  const catalog=(await request('/catalog')).data.products;assert.equal(catalog.find((p:any)=>p.id===women.data.id).gender,'Women');assert.equal(catalog.find((p:any)=>p.id===children.data.id).gender,'Children');assert.equal(catalog.find((p:any)=>p.id===legacyProduct.data.id).gender,null);
+  assert.equal(catalog.find((p:any)=>p.id===women.data.id).price,undefined);
+  const settings={name:'Fixture Store',ownerName:'Fixture Owner',tagline:'Fixture',descriptor:'JEWELLERS',addressLine1:'Fixture street',city:'Gwalior',state:'Madhya Pradesh',pincode:'474001',mapQuery:'Gwalior',latitude:26,longitude:78,phone:'919685057574',whatsapp:'919685057574',facebook:'https://www.facebook.com/fixture',instagram:'https://www.instagram.com/fixture',youtube:'https://www.youtube.com/@fixture',googleMaps:'https://maps.google.com/?q=Gwalior'};
+  assert.equal((await request('/admin/settings',settings,undefined,cookie,'PUT')).status,200);
+  assert.equal((await request('/store')).data.instagram,settings.instagram);
+  assert.equal((await request('/admin/settings',{...settings,instagram:'javascript:alert(1)'},undefined,cookie,'PUT')).status,400);
+  // One durable notification per actual price change; per-user read state and pagination.
+  assert.equal((await request('/notifications')).status,401);
+  const notes=await request('/notifications',undefined,token);assert.equal(notes.status,200);assert.ok(notes.data.items.length>=4);assert.ok(notes.data.items.every((n:any)=>n.createdAt&&n.amountPaise&&n.metal));
+  const event=notes.data.items[0];assert.equal((await request(`/notifications/${event.id}/read`,{},token)).status,201);
+  const readNotes=(await request('/notifications',undefined,token)).data;assert.equal(readNotes.items.find((n:any)=>n.id===event.id).isRead,true);assert.equal(readNotes.unreadCount,notes.data.unreadCount-1);
+  assert.equal((await request('/notifications',undefined,second.data.token)).data.items.find((n:any)=>n.id===event.id).isRead,false);
+  assert.equal((await request('/notifications?before=not-a-cursor',undefined,token)).status,400);
+  assert.equal((await request('/notifications?before='+event.id,undefined,token)).data.items.some((n:any)=>n.id===event.id),false);
+  const countBefore=(await request('/notifications',undefined,token)).data.items.length;
+  await request('/admin/rates',{metal:'Silver',buy:'222',source:'SAME PRICE TEST'},undefined,cookie);
+  assert.equal((await request('/notifications',undefined,token)).data.items.length,countBefore);
+  await request('/notifications/read-all',{},token);assert.equal((await request('/notifications',undefined,token)).data.unreadCount,0);assert.ok((await request('/notifications',undefined,second.data.token)).data.unreadCount>0);
+  const failed=await request('/admin/rates',{metal:'Gold',buy:'0',source:'INVALID RATE'},undefined,cookie);assert.equal(failed.status,400);assert.equal((await request('/notifications',undefined,token)).data.items.length,countBefore);
+  console.log('PASS: bank field validation, encrypted storage, masked customer/list response, audited admin bank view, gender create/catalogue and durable price notifications with isolated read state.');
   console.log('PASS: shared Home/trading current rate, single-price payouts, same-timestamp publication order, uncached rates and complete Gold sell history.');
   console.log('PASS: payments-disabled manual requests, Silver 5g buy / 2g sell / 3g remaining, current daily rate, isolated Gold balance, duplicate approval/payout and filtered admin valuation.');
   console.log('PASS: real MySQL KYC, whole-gram buys, exact amount and quote snapshot, retry idempotency, duplicate allocation rollback, rejection, concurrent approvals/oversell, sale approval/reservation/payout/rejection, stale quote, role guards and retired plan endpoints.');

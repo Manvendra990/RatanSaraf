@@ -12,6 +12,7 @@ import { ApiController, AdminController, AuthController } from './routes';
 import { PrismaService, prisma } from './prisma.service';
 import { ManualKycController } from './manual-kyc';
 import { GoldController, GoldAdminController } from './gold-trades';
+import { NotificationsController } from './notifications';
 import { Auth, Admin } from './auth';
 @Catch()
 class Errors implements ExceptionFilter {
@@ -25,7 +26,7 @@ class Errors implements ExceptionFilter {
   res.status(500).json({message:'Unable to complete request. Please retry.'});
  }
 }
-@Module({imports:[JwtModule.register({secret:process.env.JWT_SECRET, signOptions:{expiresIn:'8h'}})],controllers:[ApiController,AdminController,AuthController,ManualKycController,GoldController,GoldAdminController],providers:[Auth,Admin,{provide:PrismaService,useValue:prisma}]})
+@Module({imports:[JwtModule.register({secret:process.env.JWT_SECRET, signOptions:{expiresIn:'8h'}})],controllers:[NotificationsController,ApiController,AdminController,AuthController,ManualKycController,GoldController,GoldAdminController],providers:[Auth,Admin,{provide:PrismaService,useValue:prisma}]})
 class AppModule {}
 async function main() {
  if(!process.env.DATABASE_URL || !process.env.JWT_SECRET || process.env.JWT_SECRET.length<32 || /REPLACE|CHANGE/.test(process.env.JWT_SECRET)) throw new Error('Set DATABASE_URL and a random JWT_SECRET (32+ characters)');

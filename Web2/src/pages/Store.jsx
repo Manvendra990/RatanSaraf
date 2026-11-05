@@ -1,0 +1,10 @@
+import { Link } from 'react-router-dom';
+import { ArrowRight, Mail, MapPin, MessageCircle, Phone } from 'lucide-react';
+import { useStore } from '../context/StoreContext';
+import { resolveWhatsApp, storeAddress } from '../utils/format';
+export default function Store() {
+  const { store } = useStore();
+  const address = storeAddress(store);
+  const whatsapp = resolveWhatsApp(store);
+  return <><div className="page-heading"><div className="container"><div className="breadcrumbs"><Link to="/">Home</Link><span>/</span><span>Our Store</span></div><p className="eyebrow">WELCOME TO OUR WORLD</p><h1>Visit <em>Our Store</em></h1><p>We’d love to help you find something special.</p></div></div><div className="container store-layout"><div className="store-story"><span className="store-story-mark">✧</span><p className="eyebrow">RATAN LAL SARAF</p><h2>A beautiful piece for <em>every story.</em></h2><p>Explore gold jewellery, silver jewellery and precious coins from our store's collection. To learn more about a piece, check availability or request a price, reach out to our team.</p><Link className="btn btn-primary" to="/collection">Browse Collection <ArrowRight size={18}/></Link></div><div className="store-contact-card"><h3>Get in Touch</h3><p>Information below is provided by the store backend.</p>{address && <div className="store-contact-row"><MapPin size={21}/><span><strong>Our Address</strong>{address}</span></div>}{store.phone && <div className="store-contact-row"><Phone size={21}/><span><strong>Call Us</strong><a href={`tel:${String(store.phone).replace(/[^+\d]/g,'')}`}>{store.phone}</a></span></div>}{store.email && <div className="store-contact-row"><Mail size={21}/><span><strong>Email Us</strong><a href={`mailto:${store.email}`}>{store.email}</a></span></div>}{whatsapp && <a className="btn btn-whatsapp full-width" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noreferrer"><MessageCircle size={18}/> Chat on WhatsApp <ArrowRight size={17}/></a>}{!whatsapp && !address && !store.phone && !store.email && <p className="store-empty-note">The store has not published contact information yet. Check again later.</p>}</div></div></>;
+}

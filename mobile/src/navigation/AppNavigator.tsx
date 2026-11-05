@@ -1,7 +1,10 @@
-import React from 'react';
+import React,{useState} from 'react';
+import {HeaderActions} from '../components/ui/HeaderActions';
+import {FloatingContact} from '../components/ui/FloatingContact';
+import {NotificationsScreen} from '../screens/notifications/NotificationsScreen';
 import { ManualKycScreen } from '../screens/sip/ManualKycScreen';
 import { SipScreen } from '../screens/sip/SipScreen';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { CoinsScreen } from '../screens/catalog/CoinsScreen';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -27,16 +30,14 @@ import type { RootStack } from './types';
 const Stack = createNativeStackNavigator<RootStack>();
 
 export default function AppNavigator() {
+  const [routeName,setRouteName]=useState('Splash');
   return (
-    <NavigationContainer>
+    <NavigationContainer onStateChange={state=>{let r:any=state;while(r?.routes){r=r.routes[r.index||0];if(r.state)r=r.state;else break;}setRouteName(r?.name||'Splash');}}>
+     <View style={{flex:1}}>
       <Stack.Navigator
         initialRouteName="Splash"
         screenOptions={({ navigation }) => ({
-          headerRight: () => (
-            <Pressable accessibilityRole="button" accessibilityLabel="Open sidebar" onPress={() => navigation.navigate('Menu')} style={{ padding: 10 }}>
-              <Text style={{ color: colors.goldLight, fontSize: 24 }}>☰</Text>
-            </Pressable>
-          ),
+          headerRight: () => <HeaderActions/>,
           headerStyle: { backgroundColor: colors.maroon },
           headerTintColor: colors.goldLight,
           headerTitleStyle: { fontWeight: '700' },
@@ -54,6 +55,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Enquiry" component={EnquiryScreen} options={{ title: 'WhatsApp Enquiry' }} />
         <Stack.Screen name="Rates" component={RatesScreen} options={{ title: 'Metal Rates' }} />
         <Stack.Screen name="Cart" component={CartScreen} options={{ title: 'My Cart' }} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} options={{title:'Notifications'}}/>
         <Stack.Screen name="Wishlist" component={WishlistScreen} options={{ title: 'Wishlist' }} />
         <Stack.Screen name="ManualKyc" component={ManualKycScreen} options={{ title: 'Personal Details' }} />
         <Stack.Screen name="Sip" component={SipScreen} options={{ title: 'Gold & Silver' }} />
@@ -62,6 +64,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'My Profile' }} />
         <Stack.Screen name="StoreInfo" component={StoreInfoScreen} options={{ title: 'Visit Our Store' }} />
       </Stack.Navigator>
+      {!['Splash','Login','Register','Menu','ManualKyc'].includes(routeName)&&<FloatingContact key={routeName}/>}
+     </View>
     </NavigationContainer>
   );
 }

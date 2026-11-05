@@ -1,3 +1,11 @@
+# 4 November mobile extension
+
+- POST /api/gold/sales now requires rateId, grams, bankName, accountHolderName, accountNumber, confirmAccountNumber and ifsc. Account strings are 9–18 digits; confirmation must match; IFSC is uppercase `[A-Z]{4}0[A-Z0-9]{6}`. Confirm is never stored. The account is AES-GCM encrypted using existing KYC_ENCRYPTION_KEY. New customer/list responses exclude accountEncrypted and contain accountLast4. GET /api/admin/sales/:id/bank is admin-only and audited; it reveals the decrypted account for actual payout review. Older website `/api/sip/sales` retains its old payoutDetails contract for compatibility.
+- ProductDto accepts optional gender: Men, Women, Unisex, Children. Older null classifications remain visible in All. Admin Add/Edit requires an explicit choice.
+- GET /api/notifications returns {items,unreadCount,nextCursor}; use ?before=cursor for older events. POST /api/notifications/:id/read and /api/notifications/read-all modify only the authenticated user's read state. Events are shared store publications with per-user read rows. Same-price republishes do not create duplicate events; rate + notification commit atomically.
+- StoreSettings adds optional facebook, instagram, youtube and googleMaps HTTP(S) URLs.
+- This is in-app notification delivery (15-second foreground refresh), not an OS/background push service.
+
 # Current single-rate contract (2 November 2026)
 
 Admin publishes `POST /api/admin/rates` with `{metal,buy,source}`. `buy` is the one current store rate per gram. A legacy optional `sell` input is accepted for wire compatibility but ignored; new rows store buyPaise=sellPaise. No separate sell spread or fee is calculated.

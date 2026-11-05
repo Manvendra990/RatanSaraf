@@ -4,11 +4,11 @@ One **React (JSX) Vite application** serves the customer website and the redesig
 
 ## URLs (one frontend port)
 
-| Experience | Local URL |
-|---|---|
-| Jewellery storefront | http://localhost:5173/ |
-| Admin login and management | http://localhost:5173/admin |
-| Existing backend, unchanged | http://localhost:3004/api |
+| Experience                  | Local URL                   |
+| --------------------------- | --------------------------- |
+| Jewellery storefront        | http://localhost:5173/      |
+| Admin login and management  | http://localhost:5173/admin |
+| Existing backend, unchanged | http://localhost:3004/api   |
 
 **There is only ONE frontend dev server/port.** The backend remains its own NestJS process on port 3004; React routes and the Vite proxy do not replace or duplicate the backend. The admin is integrated at `/admin` and the customer site stays at `/`. A discreet Admin login shortcut is in the customer site's footer.
 

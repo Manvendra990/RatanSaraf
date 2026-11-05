@@ -417,22 +417,22 @@ promoImage: {
   // Rates card
   rates: {
     backgroundColor: colors.maroon,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 16,
+    padding: 11,
   },
 
   rateTitle: {
     color: colors.goldLight,
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "700",
-    marginBottom: 16,
+    marginBottom: 8,
   },
 
   rateRow: {
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 6,
   },
 
   column: {
@@ -442,15 +442,15 @@ promoImage: {
 
   subtitle: {
     color: colors.onDark,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 12,
+    lineHeight: 17,
   },
 
   price: {
     color: colors.goldLight,
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: "700",
-    marginVertical: 6,
+    marginVertical: 3,
   },
 
   unit: {
@@ -459,8 +459,8 @@ promoImage: {
 
   small: {
     color: colors.onDark,
-    fontSize: 10,
-    lineHeight: 17,
+    fontSize: 9,
+    lineHeight: 13,
   },
 
   arrowButton: {

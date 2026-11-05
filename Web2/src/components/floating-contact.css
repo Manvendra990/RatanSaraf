@@ -1,0 +1,165 @@
+/* Ratan Lal Saraf — premium floating contact shortcuts */
+.rls-floating-contact {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 980;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: inherit;
+}
+
+.rls-floating-trigger {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 2px solid #e8c583;
+  border-radius: 50%;
+  color: #fffaf0;
+  background: linear-gradient(145deg, #77293b 0%, #480f20 80%);
+  box-shadow: 0 9px 28px rgb(48 12 25 / 30%), inset 0 0 0 3px rgb(255 255 255 / 6%);
+  cursor: pointer;
+  transition: transform 200ms ease, box-shadow 200ms ease, background 200ms ease;
+}
+
+.rls-floating-trigger-open {
+  background: linear-gradient(145deg, #5e1728, #370b17);
+}
+
+.rls-floating-trigger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgb(48 12 25 / 34%);
+}
+
+.rls-floating-trigger:focus-visible,
+.rls-floating-link:focus-visible {
+  outline: 3px solid #d7a14e;
+  outline-offset: 4px;
+}
+
+.rls-floating-pulse {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 13px;
+  height: 13px;
+  border: 2px solid #fff9f0;
+  border-radius: 50%;
+  background: #e9c783;
+  box-shadow: 0 0 0 4px rgb(233 199 131 / 20%);
+}
+
+.rls-floating-options {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+  max-height: calc(100dvh - 110px - env(safe-area-inset-bottom));
+  max-width: calc(100vw - 24px);
+  margin-bottom: 13px;
+  padding: 5px 3px 5px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.rls-floating-link {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  min-height: 46px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  animation: rls-contact-enter 240ms ease-out both;
+  animation-delay: var(--rls-stagger, 0ms);
+}
+
+.rls-floating-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 35px;
+  padding: 7px 13px;
+  border: 1px solid #e8d7bc;
+  border-radius: 10px;
+  background: #fffaf1;
+  box-shadow: 0 4px 13px rgb(58 18 31 / 13%);
+  color: #512031;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.rls-floating-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgb(255 255 255 / 65%);
+  border-radius: 50%;
+  color: #fff;
+  box-shadow: 0 5px 16px rgb(42 10 21 / 22%);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.rls-floating-link:not(.rls-floating-disabled):hover .rls-floating-icon {
+  transform: scale(1.1);
+  box-shadow: 0 8px 19px rgb(42 10 21 / 30%);
+}
+
+.rls-floating-whatsapp .rls-floating-icon { background: #25a85b; }
+.rls-floating-phone .rls-floating-icon { background: #a87a36; }
+.rls-floating-instagram .rls-floating-icon {
+  background: linear-gradient(145deg, #6244c7, #d63082 60%, #ee9943);
+}
+.rls-floating-facebook .rls-floating-icon { background: #2877d7; }
+.rls-floating-youtube .rls-floating-icon { background: #e22b37; }
+.rls-floating-maps .rls-floating-icon { background: #258b7e; }
+
+/* Unconfigured icons stay visible, but cannot be clicked. */
+.rls-floating-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.55);
+}
+.rls-floating-disabled .rls-floating-icon {
+  box-shadow: none;
+}
+.rls-floating-disabled:hover .rls-floating-icon {
+  transform: none;
+}
+
+@keyframes rls-contact-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 640px) {
+  .rls-floating-contact {
+    right: max(14px, env(safe-area-inset-right));
+    bottom: calc(15px + env(safe-area-inset-bottom));
+  }
+  .rls-floating-trigger { width: 56px; height: 56px; }
+  .rls-floating-options { gap: 7px; margin-bottom: 10px; }
+  .rls-floating-icon { flex-basis: 44px; width: 44px; height: 44px; }
+  .rls-floating-label { padding: 7px 10px; font-size: 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rls-floating-link { animation: none; }
+  .rls-floating-trigger,
+  .rls-floating-icon { transition: none; }
+}

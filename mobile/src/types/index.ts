@@ -1,6 +1,8 @@
+export type Gender='Men'|'Women'|'Unisex'|'Children';
 export type Metal = 'Gold' | 'Silver';
 
 export type Product = {
+  gender?:Gender|null;
   id: string;
   name: string;
   metal: Metal;

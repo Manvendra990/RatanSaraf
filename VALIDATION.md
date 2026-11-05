@@ -1,28 +1,30 @@
-# Verification — 2 November 2026 single store rate and history update
+# Verification — 4 November 2026
 
-Executed on this source:
+Executed on this uploaded-code update:
 
-- Backend typecheck/build, Prisma 6.19.0 generation/validation, 15 backend tests: PASS.
-- Mobile typecheck, 5 KYC state tests, 3 history tests: PASS. History covers newest-first buy/sell ordering, pending/approved/paid/rejected sells, Gold/Silver separation and historical SIP payments.
-- React admin production build: PASS.
-- Android and iOS Metro/Hermes exports: PASS. This is not a signed APK/IPA or physical-device test.
-- Real isolated MySQL API integration: PASS. Shared Home/trading current rate, optional legacy sell input ignored, same rate used for payout/valuation, rapid same-timestamp publication order, no-store responses, superseded-rate rejection, historical accepted amounts retained, retired display-rate writes, pending/direct Gold sell rows returned, manual requests with payments disabled, Silver 5g buy / 2g sell / 3g remaining, independent Gold balance, KYC, roles, exact arithmetic, retry/concurrent approvals, duplicate allocations, oversell protection and payout/rejection transitions.
-- Real forward Prisma migration on an isolated MySQL database: PASS. Existing users, gold balances, plans, payments, ledger, banners remain; Silver starts zero; current publication pointer is initialized from the previously selected rate. Repeated deploy is a safe no-op.
-- Chromium admin browser smoke with mocked API: PASS. Current Store Rates form saves only one amount, separate Sell payout and Display Rates controls absent, metal filters, buy approve/reject, sale approval/payout, no visible UUIDs.
+- Backend typecheck / build and **17 unit/HTTP tests**: PASS. Includes structured payout DTOs, leading zeroes, malformed/missing bank fields and gender vocabulary.
+- Prisma 6.19.0 client generation and schema validation: PASS.
+- Mobile typecheck, **5 KYC state tests + 3 transaction-history tests**: PASS.
+- Android and iOS Metro/Hermes exports: PASS. This is a JavaScript/native bundle export, not a signed APK/IPA or a physical-device test.
+- Current **Web** storefront/admin production build: PASS.
+- Isolated MySQL 8.0.46 API integration: PASS. Bank mismatch/invalid IFSC rejected without changing reservations; encrypted bank storage; no full account/ciphertext in customer or admin list responses; admin-only audited bank reveal; gender saved to products/catalogue; legacy unclassified products preserved; social URLs saved and unsafe protocols rejected; durable price notifications, same-price deduplication, cursor validation and independent per-user read/all-read states. Existing Gold/Silver quote, buy approval, reservation, payout, exact-amount, retry, role, KYC and oversell regression scenarios also pass.
+- Real forward Prisma migrations: PASS. Historical users, balances, SIP records, payments, ledger, archived banners, legacy product and old sale details remain unchanged; new gender/bank values default null and notification tables start empty. Repeated deploy is safe.
+- Chromium admin browser smoke with mocked API: PASS for gender filter/edit/save, private bank dialog at desktop and 390px viewport, and social settings save.
+- Home source comparison against supplied ZIP: PASS. Everything before its StyleSheet declaration is identical; all original style colour values are identical. Only card sizing/spacing/type scale was changed.
 
-Not tested: your Windows MySQL, your physical phone/installed APK, real bank transfers/custody, external KYC verification or real customer records. The generated design preview is illustrative, not evidence of a running app.
+Not executed: your Windows database, physical Android/iOS UI, actual phone calls/social app handoff, real bank payout, signed APK/EAS/IPA, OS background push notifications or external KYC provider verification. The in-app bell/list is implemented; OS push is outside the approved scope.
 
-Reproduce from the respective folders:
+Run from the respective folders:
 
 ```
 backend: npm run typecheck
 backend: npm test
 backend: npm run prisma:validate
-admin: npm run build
+Web: npm run build
 mobile: npm run typecheck
 mobile: npm run test:kyc
 mobile: npm run test:trading
 mobile: npx expo export --platform all
 ```
 
-Database tests require NEW EMPTY isolated databases ending in _test, with TEST_DATABASE_URL / TEST_MIGRATION_DATABASE_URL. Run npm run test:mysql / npm run test:migration from backend. Never point tests at the customer database. Neither suite clears an existing database.
+The MySQL integration suites require NEW EMPTY databases ending in `_test`: configure TEST_DATABASE_URL / TEST_MIGRATION_DATABASE_URL, then run `npm run test:mysql` / `npm run test:migration` from backend. Never use the customer database for these tests. They do not reset existing tables.

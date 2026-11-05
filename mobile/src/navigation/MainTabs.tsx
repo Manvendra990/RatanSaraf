@@ -3,6 +3,8 @@ import { RateCalculatorScreen } from '../screens/calculator/RateCalculatorScreen
 import Svg, { Path } from 'react-native-svg';
 import { Text, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import {HeaderActions} from '../components/ui/HeaderActions';
+import {AppIcon} from '../components/ui/AppIcon';
 import { HeaderBrand } from '../components/ui';
 import { colors } from '../constants/theme';
 import {
@@ -26,6 +28,9 @@ export function MainTabs() {
     <Tabs.Navigator
       screenOptions={{
         headerTitle: () => <HeaderBrand onMenuPress={() => navigation.navigate('Menu')} />,
+        headerRight: () => <HeaderActions/>,
+        headerTitleAlign:'left',
+        headerTitleContainerStyle:{left:8,right:122},
         headerStyle: { backgroundColor: colors.maroon },
         headerTintColor: colors.goldLight,
         headerTitleStyle: { fontWeight: '700' },
@@ -58,7 +63,7 @@ export function MainTabs() {
       <Tabs.Screen
         name="ProfileTab"
         component={ProfileScreen}
-        options={{ title: 'Profile', tabBarIcon: icon('☺') }}
+        options={{ title: 'Profile', tabBarIcon: ({color}) => <AppIcon name="user" size={22} color={color}/> }}
       />
     </Tabs.Navigator>
   );

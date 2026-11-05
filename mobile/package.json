@@ -13,19 +13,20 @@
     "test:trading": "tsc src/utils/tradeHistory.ts --outDir .test-build --module commonjs --target es2022 --skipLibCheck && node --test test/trade-history.test.cjs"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "9.2.1",
+    "@react-navigation/bottom-tabs": "^7.0.0",
+    "@react-navigation/native": "^7.0.0",
+    "@react-navigation/native-stack": "^7.0.0",
+    "expo": "58.0.19",
+    "expo-constants": "~58.0.13",
+    "expo-document-picker": "~58.0.4",
+    "expo-secure-store": "~58.0.2",
+    "expo-status-bar": "~58.0.4",
     "react": "19.3.0",
     "react-native": "0.88.0",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
-    "react-native-svg": "15.16.0",
-    "expo-secure-store": "~58.0.2",
-    "expo-status-bar": "~58.0.4",
-    "expo": "58.0.19",
-    "@react-navigation/native": "^7.0.0",
-    "@react-navigation/native-stack": "^7.0.0",
-    "@react-navigation/bottom-tabs": "^7.0.0",
-    "expo-document-picker": "~58.0.4",
-    "@react-native-community/datetimepicker": "9.2.1"
+    "react-native-svg": "15.16.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.0",

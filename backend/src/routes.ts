@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { rows, tx, prisma, normalize } from './db';
 import { Auth, Admin, digest } from './auth';
 import * as D from './dto';
+import { seal, unseal } from './kyc-crypto';
 import { currentStoreRates } from './store-rates';
 import { parseUnits, sellPaise, display, nextDue } from './money';
 const id = randomUUID;
@@ -68,7 +69,7 @@ export class ApiController {
   return {holdings:{Gold:{balance:display(a?.grams||'0',6),reserved:display(a?.reserved||'0',6),available:display(BigInt(a?.grams||0)-BigInt(a?.reserved||0),6)},Silver:{balance:display(a?.silverGrams||'0',6),reserved:display(a?.silverReserved||'0',6),available:display(BigInt(a?.silverGrams||0)-BigInt(a?.silverReserved||0),6)}},balance:display(a?.grams||'0',6),reserved:display(a?.reserved||'0',6),available:display(BigInt(a?.grams||0)-BigInt(a?.reserved||0),6),kyc:k||null,manualKyc:(await rows('SELECT id,status,note,submittedAt,reviewedAt FROM manual_kyc WHERE userId=?',[u]))[0]||null,
    purchases:await rows('SELECT g.*,r.metal,r.buyPaise FROM gold_purchases g JOIN rates r ON r.id=g.rateId WHERE g.userId=? ORDER BY g.createdAt DESC,g.id DESC',[u]),
    payments:await rows('SELECT p.*,r.metal,r.buyPaise FROM payments p JOIN rates r ON r.id=p.rateId WHERE userId=? ORDER BY p.createdAt DESC',[u]),
-   sales:await rows('SELECT s.*,r.metal FROM sales s JOIN rates r ON r.id=s.rateId WHERE s.userId=? ORDER BY s.createdAt DESC',[u]),ledger:await rows('SELECT * FROM ledger WHERE userId=? ORDER BY createdAt DESC',[u])};
+   sales:(await rows('SELECT s.*,r.metal FROM sales s JOIN rates r ON r.id=s.rateId WHERE s.userId=? ORDER BY s.createdAt DESC',[u])).map(({accountEncrypted,...safe}:any)=>safe),ledger:await rows('SELECT * FROM ledger WHERE userId=? ORDER BY createdAt DESC',[u])};
  }
  @Post('kyc/start') @UseGuards(Auth) async kyc(@Req() req:any,@Body() b:D.KycConsent) {
   if(!process.env.KYC_API_URL||!process.env.KYC_API_KEY||!process.env.KYC_WEBHOOK_SECRET)throw new ServiceUnavailableException('Aadhaar KYC provider is not configured. Contact the store.');
@@ -86,17 +87,25 @@ export class ApiController {
   await tx(async db=>{const [k]=await rows('SELECT * FROM kyc WHERE id=? AND providerRef=? FOR UPDATE',[b.reference,b.providerRef],db);requireThat(k,'Unknown verification');if(k.status!=='PENDING'){requireThat(k.status===b.status,'Verification already finalized');return;}await rows('UPDATE kyc SET status=? WHERE id=?',[b.status,b.reference],db);await audit(db,k.userId,'KYC_'+b.status,k.id);});return {ok:true};
  }
  @Post(['sip/subscriptions','sip/payments']) @UseGuards(Auth) retiredPlans(){throw new GoneException('Monthly/yearly plans are retired. Use Buy Gold by grams at the current store quote.');}
- @Post(['sip/sales','gold/sales']) @UseGuards(Auth) async sell(@Req() req:any,@Body() b:D.Sale) {
+ @Post('gold/sales') @UseGuards(Auth) async sell(@Req() req:any,@Body() b:D.Sale) {
+  requireThat(b.accountNumber===b.confirmAccountNumber,'Account numbers do not match');
+  requireThat(b.bankName.trim().length>=2&&b.accountHolderName.trim().length>=2,'Enter bank and account holder names');
+  return this.createSale(req,b,false);
+ }
+ // Retained only for the supplied older website; new mobile requests use structured bank fields.
+ @Post('sip/sales') @UseGuards(Auth) legacySell(@Req() req:any,@Body() b:D.LegacySale){return this.createSale(req,b,true);}
+ async createSale(req:any,b:any,legacy:boolean){
   return tx(async db=>{
    await verified(req.user.id,db);
    const r=await quote(b.rateId,db), silver=r.metal==='Silver';
    const balance=silver?'silverGrams':'grams',reserved=silver?'silverReserved':'reserved';
    const [a]=await rows('SELECT * FROM accounts WHERE userId=? FOR UPDATE',[req.user.id],db);
    const grams=units(b.grams,6);requireThat(grams>0n,'Enter a positive weight');
-   requireThat(b.payoutDetails.trim().length>=5,'Enter valid payout details');
+   if(legacy)requireThat(b.payoutDetails.trim().length>=5,'Enter valid payout details');
    requireThat(a&&grams<=BigInt(a[balance])-BigInt(a[reserved]),'Insufficient available '+r.metal);
    const amount=sellPaise(grams,BigInt(r.buyPaise));requireThat(amount>0n,'Sale too small');const ref=id();
-   await rows('INSERT INTO sales(id,userId,rateId,grams,amountPaise,payoutDetails) VALUES(?,?,?,?,?,?)',[ref,req.user.id,r.id,grams.toString(),amount.toString(),b.payoutDetails],db);
+   await rows('INSERT INTO sales(id,userId,rateId,grams,amountPaise,payoutDetails) VALUES(?,?,?,?,?,?)',[ref,req.user.id,r.id,grams.toString(),amount.toString(),legacy?b.payoutDetails:`Bank transfer •••• ${b.accountNumber.slice(-4)}`],db);
+   if(!legacy)await rows('UPDATE sales SET bankName=?,accountHolderName=?,accountLast4=?,accountEncrypted=?,ifsc=? WHERE id=?',[b.bankName.trim(),b.accountHolderName.trim(),b.accountNumber.slice(-4),seal(Buffer.from(b.accountNumber)).toString('base64'),b.ifsc,ref],db);
    await rows(`UPDATE accounts SET ${reserved}=${reserved}+? WHERE userId=?`,[grams.toString(),req.user.id],db);
    return {id:ref,metal:r.metal,amount:display(amount,2)};
   });
@@ -113,7 +122,7 @@ export class AdminController {
   return {url:(process.env.PUBLIC_API_URL||'http://localhost:3004/api').replace(/\/api\/?$/,'')+'/media/'+name};
  }
  @Get('settings') async settings(){const [s]=await rows('SELECT data FROM settings WHERE id=1');return s?.data||{};}
- @Put('settings') async settingsSave(@Req() req:any,@Body() b:D.StoreSettings){await tx(async db=>{await rows('INSERT INTO settings(id,data) VALUES(1,?) ON DUPLICATE KEY UPDATE data=VALUES(data)',[JSON.stringify(b)],db);await audit(db,req.user.id,'STORE_SETTINGS','1');});return {ok:true};}
+ @Put('settings') async settingsSave(@Req() req:any,@Body() b:D.StoreSettings){for(const key of ['facebook','instagram','youtube','googleMaps'] as const){const v=b[key];if(v){try{requireThat(['http:','https:'].includes(new URL(v).protocol),'Use HTTP(S) social links');}catch{throw new BadRequestException('Use valid HTTP(S) social links');}}}await tx(async db=>{await rows('INSERT INTO settings(id,data) VALUES(1,?) ON DUPLICATE KEY UPDATE data=VALUES(data)',[JSON.stringify(b)],db);await audit(db,req.user.id,'STORE_SETTINGS','1');});return {ok:true};}
  @Get('overview') async overview(@Query('metal') selected?:string){
   const metal=selected==='Silver'?'Silver':'Gold',balance=metal==='Silver'?'silverGrams':'grams',reserved=metal==='Silver'?'silverReserved':'reserved';
   const [[users],[buys],[sales],[account],[rate]]=await Promise.all([
@@ -137,13 +146,15 @@ export class AdminController {
  @Put('products/:id') updateProduct(@Req() req:any,@Param('id') ref:string,@Body() b:D.ProductDto){return this.saveProduct(req,ref,b,true);}
  async saveProduct(req:any,ref:string,b:D.ProductDto,update:boolean){
   const price=units(b.price,2);requireThat(!b.image||/^https?:\/\//.test(b.image),'Use an HTTP(S) image URL');
-  await tx(async db=>{const [c]=await rows('SELECT * FROM categories WHERE id=? FOR UPDATE',[b.categoryId],db);requireThat(c&&c.metal===b.metal,'Category must match product metal');requireThat(c.name!=='Coins'||(b.coinWeight&&[0.5,1,10,20,50].includes(Number(b.coinWeight))),'Select a supported coin weight: 0.5, 1, 10, 20 or 50 grams');if(update)requireThat((await rows('SELECT id FROM products WHERE id=?',[ref],db)).length,'Product not found');const vals=[b.name,b.metal,b.categoryId,price.toString(),b.weight,b.purity,b.image,b.description,c.name==='Coins'?(b.coinWeight||null):null,b.stock,b.active];await rows(update?'UPDATE products SET name=?,metal=?,categoryId=?,pricePaise=?,weight=?,purity=?,image=?,description=?,coinWeight=?,stock=?,active=? WHERE id=?':'INSERT INTO products(name,metal,categoryId,pricePaise,weight,purity,image,description,coinWeight,stock,active,id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[...vals,ref],db);await rows('UPDATE products SET productCode=?,brand=?,colour=?,availability=?,certifiedBy=?,featured=? WHERE id=?',[b.productCode||'',b.brand||'',b.colour||'',b.availability||'Contact store',b.certifiedBy||'',!!b.featured,ref],db);await audit(db,req.user.id,'PRODUCT_SAVE',ref);});return {id:ref};
+  await tx(async db=>{const [c]=await rows('SELECT * FROM categories WHERE id=? FOR UPDATE',[b.categoryId],db);requireThat(c&&c.metal===b.metal,'Category must match product metal');requireThat(c.name!=='Coins'||(b.coinWeight&&[0.5,1,10,20,50].includes(Number(b.coinWeight))),'Select a supported coin weight: 0.5, 1, 10, 20 or 50 grams');if(update)requireThat((await rows('SELECT id FROM products WHERE id=?',[ref],db)).length,'Product not found');const vals=[b.name,b.metal,b.categoryId,price.toString(),b.weight,b.purity,b.image,b.description,c.name==='Coins'?(b.coinWeight||null):null,b.stock,b.active];await rows(update?'UPDATE products SET name=?,metal=?,categoryId=?,pricePaise=?,weight=?,purity=?,image=?,description=?,coinWeight=?,stock=?,active=? WHERE id=?':'INSERT INTO products(name,metal,categoryId,pricePaise,weight,purity,image,description,coinWeight,stock,active,id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',[...vals,ref],db);if(b.gender!==undefined)await rows('UPDATE products SET gender=? WHERE id=?',[b.gender,ref],db);await rows('UPDATE products SET productCode=?,brand=?,colour=?,availability=?,certifiedBy=?,featured=? WHERE id=?',[b.productCode||'',b.brand||'',b.colour||'',b.availability||'Contact store',b.certifiedBy||'',!!b.featured,ref],db);await audit(db,req.user.id,'PRODUCT_SAVE',ref);});return {id:ref};
  }
  @Post('rates') async rate(@Req() req:any,@Body() b:D.Rate){
   const amount=units(b.buy,2);requireThat(amount>0n,'Enter a positive current rate per gram');const ref=id();
   await tx(async db=>{
+   const [old]=await rows('SELECT r.buyPaise FROM rate_publications p JOIN rates r ON r.id=p.rateId WHERE p.metal=? FOR UPDATE',[b.metal],db);
    await rows('INSERT INTO rates(id,metal,buyPaise,sellPaise,source) VALUES(?,?,?,?,?)',[ref,b.metal,amount.toString(),amount.toString(),b.source],db);
    await rows('INSERT INTO rate_publications(metal,rateId) VALUES(?,?) ON DUPLICATE KEY UPDATE rateId=VALUES(rateId)',[b.metal,ref],db);
+   if(!old||BigInt(old.buyPaise)!==amount)await rows('INSERT INTO rate_notifications(rateId,metal,amountPaise) VALUES(?,?,?)',[ref,b.metal,amount.toString()],db);
    await audit(db,req.user.id,'STORE_RATE_PUBLISH',ref);
   });return {id:ref};
  }
@@ -151,7 +162,11 @@ export class AdminController {
  @Get('kyc') kyc(){return rows('SELECT k.*,u.name,u.email FROM kyc k JOIN users u ON u.id=k.userId ORDER BY consentAt DESC');}
  @Get('subscriptions') subscriptions(){return rows('SELECT s.*,u.name,p.name AS planName FROM subscriptions s JOIN users u ON u.id=s.userId JOIN plans p ON p.id=s.planId ORDER BY anchorAt DESC');}
  @Get('payments') payments(){return rows('SELECT p.*,u.name FROM payments p JOIN users u ON u.id=p.userId ORDER BY p.createdAt DESC');}
- @Get('sales') sales(){return rows('SELECT s.*,r.metal,u.name FROM sales s JOIN rates r ON r.id=s.rateId JOIN users u ON u.id=s.userId ORDER BY s.createdAt DESC');}
+ @Get('sales') async sales(){return (await rows('SELECT s.*,r.metal,u.name FROM sales s JOIN rates r ON r.id=s.rateId JOIN users u ON u.id=s.userId ORDER BY s.createdAt DESC')).map(({accountEncrypted,...safe}:any)=>safe);}
+ @Get('sales/:id/bank') async saleBank(@Req() req:any,@Param('id') ref:string){
+  return tx(async db=>{const [s]=await rows('SELECT bankName,accountHolderName,accountLast4,accountEncrypted,ifsc,payoutDetails FROM sales WHERE id=?',[ref],db);requireThat(s,'Sale not found');await audit(db,req.user.id,'SALE_BANK_VIEW',ref);const {accountEncrypted,...safe}=s;return {...safe,accountNumber:accountEncrypted?unseal(Buffer.from(accountEncrypted,'base64')).toString():null};});
+ }
+
  @Get('ledger') ledger(){return rows('SELECT l.*,u.name FROM ledger l JOIN users u ON u.id=l.userId ORDER BY l.createdAt DESC');}
  @Get('enquiries') enquiries(){return rows('SELECT e.*,u.name,p.name AS productName,p.productCode FROM enquiries e JOIN users u ON u.id=e.userId LEFT JOIN products p ON p.id=e.productId ORDER BY e.createdAt DESC');}
  @Get('audit') audits(){return rows('SELECT a.*,u.name AS actorName FROM audit a LEFT JOIN users u ON u.id=a.actor ORDER BY a.createdAt DESC LIMIT 500');}
